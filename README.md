@@ -20,7 +20,7 @@ Check what remote branch your current branch is tracking
 ```
 git branch -vv
 ```
-Check list of available branches
+Check list of available branches d
 ```
 git branch -a
 ```
