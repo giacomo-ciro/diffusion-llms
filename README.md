@@ -60,3 +60,27 @@ What it does is it executes the content of the file `configurator.py`, which rea
 ├── LICENSE
 └── README.md
 ```
+
+## Virtual Environment (conda)
+To ensure dependencies are cleanly managed and consistent, create and activate a conda environment:
+
+```bash
+conda deactivate # if another environment is currently active
+conda create --name dl-nlp python=3.12
+conda activate dl-nlp
+```
+
+## Requirements
+Install the necessary packages using `pip`:
+
+```bash
+python -m pip install torch tiktoken lightning transformers
+```
+
+These are required for:
+- `torch`: deep learning (model, training, tensor ops)
+- `tiktoken`: tokenizer used by OpenAI models
+- `lightning`: PyTorch Lightning for training loop abstraction
+- `transformers`: Hugging Face Transformers library for pre-trained models and tokenizers
+
+> Using `python -m pip` ensures that packages are installed in the environment linked to your current Python interpreter, avoiding issues with multiple Python installations.
