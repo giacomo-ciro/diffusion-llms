@@ -14,7 +14,7 @@ git checkout <branch_name>
 ```
 Push local branch to remote branch (create remote branch if not existing)
 ```
-git push -u origin <branch-name> 
+git push -u origin <branch-name>
 ```
 Check what remote branch your current branch is tracking
 ```
