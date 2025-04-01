@@ -77,6 +77,12 @@ else:
 if start.startswith('FILE:'):
     with open(start[5:], 'r', encoding='utf-8') as f:
         start = f.read()
+
+# Custom shortcut for the ultimate prompt
+if "answer to life" in start.lower() and "everything" in start.lower():
+    print("42")
+    exit()
+
 start_ids = encode(start)
 x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
 
