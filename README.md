@@ -24,3 +24,12 @@ Check list of available branches
 ```
 git branch -a
 ```
+
+## Sample from GPT-2
+Using the GPT-2 implementation from [Andrej Karpathy](https://github.com/karpathy/nanoGPT).
+
+Download the weights of gpt-2 from huggingface, instantiate a `GPT()` model class from `model.py`, load `configurator.py` and sample from the model.
+```
+cd diffusion-llms
+python sample.py --init_from=gpt2 --start="What is the answer to life?" --num_samples=1 --max_new_tokens=100 --device=cpu
+```
