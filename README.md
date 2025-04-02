@@ -84,3 +84,10 @@ These are required for:
 - `transformers`: Hugging Face Transformers library for pre-trained models and tokenizers
 
 > Using `python -m pip` ensures that packages are installed in the environment linked to your current Python interpreter, avoiding issues with multiple Python installations.
+
+## References
+- [Large Language Diffusion Models](https://arxiv.org/pdf/2502.09992)
+- [BLOCK DIFFUSION: INTERPOLATING BETWEEN AUTOREGRESSIVE AND DIFFUSION LANGUAGE MODELS](https://arxiv.org/pdf/2503.09573)
+- [SCALING DIFFUSION LANGUAGE MODELS VIA ADAPTATION FROM AUTOREGRESSIVE MODELS](https://arxiv.org/pdf/2410.17891)
+- [DiffusionBERT: Improving Generative Masked Language Models with Diffusion Models](https://arxiv.org/pdf/2211.15029)
+- [SCALING LAWS FOR DIFFUSION TRANSFORMERS](https://arxiv.org/pdf/2410.08184)
