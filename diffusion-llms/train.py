@@ -69,6 +69,8 @@ early_stopping = EarlyStopping(
 
 # Init the trainer
 trainer = pl.Trainer(
+    gpus=config.get("gpus"),                    # Number of GPUs to use
+    strategy=config.get("strategy"),            # Distributed training strategy
     max_epochs=config["n_epochs"] if config["n_epochs"] else None,
     max_steps=config['n_steps'],                # stops when one of the two is met
     accelerator="auto",                         # recognizes device

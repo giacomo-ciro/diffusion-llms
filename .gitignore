@@ -4,3 +4,5 @@
 */wandb/
 */local_config.json
 *.ckpt
+
+.DS_Store
