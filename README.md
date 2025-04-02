@@ -39,3 +39,5 @@ In `sample.py` the following line is used to override the declared variable insi
 exec(open('configurator.py').read())
 ```
 What it does is it executes the content of the file `configurator.py`, which reads the command linle args and overrides the previously declared variables in `globals()`. Effectively, we are in file A, and runnning the content of file B which modifies the global variables previously declared in file A. (TODO replace all this with a `config.json` file)
+
+# Jack e' piu forte
