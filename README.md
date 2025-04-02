@@ -1,6 +1,12 @@
 # diffusion-llms
 Making LLMs inference faster with diffusion.
 
+## Overview
+### Research Question
+We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a fully native diffusion variable length generation.
+
+### Technical Soundness (Experimental Strategy)
+
 ## Rules
 Everybody **must** use its own branch during development, together we handle merges.
 
