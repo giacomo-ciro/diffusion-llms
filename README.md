@@ -1,9 +1,13 @@
 # diffusion-llms
 Making LLMs inference faster with diffusion.
 
+## TODOs
+- [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
+- [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
+- [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
 ## Overview
 ### Research Question
-We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a fully native diffusion variable length generation.
+We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
 
 #### IDEA FOR NLP
 Compare attention weights between auto-regressive and diffusion models.
