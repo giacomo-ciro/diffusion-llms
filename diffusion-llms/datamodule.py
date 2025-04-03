@@ -1,65 +1,113 @@
-
 import json
 import os
 
 import torch
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, random_split
-from datasets import load_dataset 
 import lightning as pl
-import tiktoken
+from torch.utils.data import Dataset, DataLoader, random_split
 
-CONFIG_PATH = "./config.json"
+class MemmapTokenDataset(Dataset):
+    """
+    Reads data directly from disk using np.memmap. 
+    When accessed at ix, returns a sequence starting at that idx and the target one (shifted by 1)
+    """
+    def __init__(
+            self,
+            memmap_path,
+            context_length,
+            stride=None
+        ):
 
-class MemoryMappedDataset(Dataset):
-    """
-    Creates a memory-backed dataset to iterate over.
-    First check whether the data.bin numpy array already exists, then read it. If not existent, create it.
-    """
-    def __init__(self, filename, dtype, shape, transform=None):
-        self.memmap = np.memmap(filename, dtype=dtype, mode='r', shape=shape)
-        self.transform = transform
+        self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
+        self.context_length = context_length
+        self.stride = stride if stride is not None else 1
+        
+        # Calculate effective length
+        self.effective_length = (len(self.data) - context_length) // self.stride + 1
         
     def __len__(self):
-        return len(self.memmap)
+        return self.effective_length
     
     def __getitem__(self, idx):
-        # Get numpy array from memmap
-        sample = self.memmap[idx].copy()  # Copy to avoid issues with the memmap
         
-        # Convert to torch tensor
-        sample = torch.from_numpy(sample)
+        # Calculate start position based on stride
+        start_idx = idx * self.stride
         
-        if self.transform:
-            sample = self.transform(sample)
-            
-        return sample
+        # Get sequence of indices
+        X = self.data[start_idx:start_idx + self.context_length].copy()
+
+        # Shifted by 1
+        y = self.data[start_idx+1:start_idx + self.context_length+1].copy()
+        
+        # Random mask
+        # mask = torch.rand(
+        #     size=(sequence.shape[0],), 
+        #     dtype=torch.float32
+        # ) < 0.15
+
+        return torch.from_numpy(X), torch.from_numpy(y)
     
-
-class DataModule(pl.LightningDataModule):
+class MemmapDataModule(pl.LightningDataModule):
     """
-    Datamodule takes care of reading from disk the data (text), and returning a batch = (ids, targets).
-    Data is read as a np.memmap() array to avoid loading everything on RAM
+    The main datamodule. When iterated over, returns batches of (X, y) of sequence and target sequence shifted by one.
     """
-    def __init__(self, dataset_path, size):
+    def __init__(
+        self, 
+        config_path
+    ):
         super().__init__()
-        with open(CONFIG_PATH, "r") as f:
+
+        with open(config_path, "r") as f:
             self.config = json.load(f)
-        self.tokenizer = tiktoken.get_encoding("gpt2")
-        self.data = load_dataset(dataset_path, streaming=True)["train"].take(size)
-
-    def prepare_data(self):
-        # TODO: add code to download census SOMA here
-        pass
-
+        
+        self.memmap_path = self.config["memmap_path"]
+        self.context_length = self.config["context_length"]
+        self.mask_ratio = self.config["mask_ratio"]
+        self.batch_size = self.config["batch_size"]
+        self.train_val_test_split = self.config["train_val_test_split"]
+        self.num_workers = os.cpu_count()-1
+    
     def setup(self, stage=None):
         
-
-    def train_dataloader(self) -> DataLoader:
-        return soma_ml.experiment_dataloader(self.train_dataset)
+        if os.path.exists(self.memmap_path):
+            self.data = MemmapTokenDataset(
+            self.memmap_path, 
+            self.context_length
+        )
+        else:
+            # TODO: create the memmap if the required data is not available
+            raise NotImplementedError()
+        
+        
+        # Split the dataset
+        self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
+            self.data,
+            self.train_val_test_split
+        )
     
-    def val_dataloader(self) -> DataLoader:
-        return soma_ml.experiment_dataloader(self.val_dataset)
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            pin_memory=True
+        )
     
-    def test_dataloader(self) -> DataLoader:
-        return soma_ml.experiment_dataloader(self.test_dataset)
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+            pin_memory=True
+        )
+    
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+            pin_memory=True
+        )
