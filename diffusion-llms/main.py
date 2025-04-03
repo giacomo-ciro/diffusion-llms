@@ -1,9 +1,19 @@
+import json
+import wandb
 import torch
 from model import GPT2
+import tiktoken
 
-model = GPT2()
+CONFIG_PATH = "./config.json"
 
-print("Successfully loaded GPT-2")
+with open(CONFIG_PATH, "r") as f:
+    config = json.load(f)
+
+enc = tiktoken.get_encoding("gpt2")
+encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
+decode = lambda l: enc.decode(l)
+
+model = GPT2(CONFIG_PATH)
 
 # Test model Logic
 # 1 sentence of len 10, from a vocab of 100 toks
@@ -18,7 +28,7 @@ out = model.step(
 )
 
 # The loss
-print(out)
+print(f"Loss {out}")
 
 # TODO: 
 # 1. Implement tokenizer (inside lightning module)

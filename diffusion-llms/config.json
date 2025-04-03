@@ -1,4 +1,11 @@
 {
+    "model_checkpoint":"",
+    
+    "block_size": 512,
+    "n_embd": 128,
+    "n_layer": 4,
+    "n_head": 4, 
+    
     "weight_decay": 0.01,
     "learning_rate": 0.1,
     "betas": [0.9,0.99],
