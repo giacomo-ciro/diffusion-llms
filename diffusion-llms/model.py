@@ -34,7 +34,7 @@ class GPT2(pl.LightningModule):
             print(f"Loaded GPT-2 from {chkp}.")
         else:
             gptconfig = GPTConfig(
-                block_size=config["block_size"],
+                block_size=config["context_length"],
                 n_embd=config["n_embd"],
                 n_layer=config["n_layer"],
                 n_head=config["n_head"],
@@ -59,20 +59,21 @@ class GPT2(pl.LightningModule):
         # Read in the batch
         # X is token idx, (B, T)
         # y is idx shifted by one, (B, T)
-        idx, targets = batch
+        X, y = batch
+        X, y = X.to(torch.int64), y.to(torch.int64)
 
-        logits, loss = self.forward(idx, targets)
+        logits, loss = self.forward(X, y)
         
         return loss
 
     def training_step(self, batch, batch_idx):
         loss = self.step(batch, batch_idx)
-        self.log("train/MLM", loss, prog_bar=True)
+        self.log("train/ce", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self.step(batch, batch_idx)
-        self.log("valid/MLM", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("valid/ce", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -90,7 +91,7 @@ class GPT2(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "valid/mse",  # Metric to track
+                "monitor": "valid/ce",  # Metric to track
                 "interval": "epoch",
                 "frequency": 1,  # Check after each epoch
             },
