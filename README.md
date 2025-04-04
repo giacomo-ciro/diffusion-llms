@@ -3,21 +3,22 @@ Making LLMs inference faster with diffusion.
 
 ## TODOs
 - [x] ~~Setup WandB project and logging~~
+- [x] Update README with wandB instructions
 - [ ] Compute lr decay steps automatically (e.g. 0.6 of total steps)
 - [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
 - [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
 - [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
 - [ ] Setup checkpointing (save weights and init from local weights)
+
 ## Overview
 ### Research Question
 We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
 
 ### Notes
 When running on hpc, gpt2 small with batch_size = 8 is the largest it can be (using both 1080 gpus...)
+
 #### IDEA FOR NLP
 Compare attention weights between auto-regressive and diffusion models.
-
-### Technical Soundness (Experimental Strategy)
 
 ## Rules
 ### Branches
@@ -80,7 +81,9 @@ $ python
 │   ├── gpt2.py 
 │   ├── main.py 
 │   ├── model.py 
-│   └── sample.py 
+│   ├── sample.py
+│   └── train.py
+├── papers/
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -99,7 +102,7 @@ conda activate dl-nlp
 Install the necessary packages using `pip`:
 
 ```bash
-python -m pip install torch tiktoken lightning transformers
+python -m pip install torch tiktoken lightning transformers wandb
 ```
 
 These are required for:
@@ -107,6 +110,7 @@ These are required for:
 - `tiktoken`: tokenizer used by OpenAI models
 - `lightning`: PyTorch Lightning for training loop abstraction
 - `transformers`: Hugging Face Transformers library for pre-trained models and tokenizers
+- `wandb`: Weights & Biases for experiment tracking and visualization
 
 > Using `python -m pip` ensures that packages are installed in the environment linked to your current Python interpreter, avoiding issues with multiple Python installations.
 

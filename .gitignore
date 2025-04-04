@@ -2,4 +2,4 @@
 */lightning_logs/
 */__pycache__/
 */wandb/
-*/local_config.json
+#*/local_config.json
