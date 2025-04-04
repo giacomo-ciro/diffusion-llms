@@ -1,6 +1,6 @@
 {
     "init_from":"",
-    "memmap_path": "./data/openwebtext_10k/train.bin",
+    "memmap_path": "./data/openwebtext/train_1M.bin",
     "context_length": 1024,
     "n_embd": 768,
     "n_layer": 12,
