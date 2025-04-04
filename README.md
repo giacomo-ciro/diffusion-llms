@@ -49,8 +49,8 @@ In the `config.json` file.sing the GPT-2 implementation from [Andrej Karpathy](h
 
 Download the weights of gpt-2 from huggingface, instantiate a `GPT()` model class from `model.py`, load `configurator.py` and sample from the model. Specifying the prompt and the number of answers to generate.
 ``` 
-cd diffusion-llms
-python sample.py path/to/config
+$ cd diffusion-llms
+$ python sample.py path/to/config
 ```
 
 ### Train a model
@@ -58,6 +58,14 @@ Specify in the `config.json` file the parameters of the training. The key `init_
 ```
 cd diffusion-llms
 python train.py path/to/config.json
+```
+
+### WandB login
+To use wandb, you must login (locally or on hpc). From the CLI, run the following (and follow the prompts):
+```
+$ python
+>>> import wandb
+>>> wandb.login()
 ```
 
 ## Repository Structure
