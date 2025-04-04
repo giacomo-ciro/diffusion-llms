@@ -2,7 +2,8 @@
 Making LLMs inference faster with diffusion.
 
 ## TODOs
-- [ ] Setup WandB project and logging
+- [x] ~~Setup WandB project and logging~~
+- [ ] Compute lr decay steps automatically (e.g. 0.6 of total steps)
 - [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
 - [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
 - [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
