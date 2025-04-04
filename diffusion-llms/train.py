@@ -7,6 +7,7 @@ from datamodule import MemmapDataModule
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.callbacks import TQDMProgressBar
 
+# From the command line we can specify the config.file
 if len(sys.argv) == 2:
     CONFIG_PATH = sys.argv[1]
 else:
@@ -37,10 +38,6 @@ datamodule = MemmapDataModule(CONFIG_PATH)
 # Instantiate a model
 model = GPT2(CONFIG_PATH)
 
-# progress_bar = TQDMProgressBar(
-#     refresh_rate=len(datamodule.train_dataloader()) // 4,  # print progress bar every 25% of train epoch
-#     leave=True,  # leave the last one at epoch end
-# )
 # Init the trainer
 trainer = pl.Trainer(
     max_epochs=config["n_epochs"],
