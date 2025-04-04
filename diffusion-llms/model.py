@@ -117,6 +117,16 @@ class GPT2(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss = self.step(batch, batch_idx)
         self.log("train/ce", loss, on_step=True, on_epoch=False, prog_bar=True)
+
+        # Log current learning rate
+        current_lr = self.optimizers().param_groups[0]['lr']
+        self.log('learning_rate', current_lr, prog_bar=True, on_step=True, on_epoch=False)
+        
+        # # Log all parameter group learning rates
+        # for i, param_group in enumerate(self.optimizers().param_groups):
+        #     self.log(f'learning_rate_group_{i}', param_group['lr'], 
+        #              prog_bar=False, on_step=True, on_epoch=False)
+            
         return loss
 
     def validation_step(self, batch, batch_idx):
