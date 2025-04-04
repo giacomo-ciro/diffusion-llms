@@ -3,3 +3,4 @@ lightning
 wandb
 numpy
 tiktoken
+datasets
