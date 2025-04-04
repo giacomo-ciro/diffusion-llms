@@ -81,7 +81,7 @@ class MemmapDataModule(pl.LightningDataModule):
         )
         else:
             # TODO: create the memmap if the required data is not available
-            raise NotImplementedError()
+            raise NotImplementedError(f"Unable to find {self.memmap_path}, please create it using prepare.py")
         
         
         # Split the dataset
