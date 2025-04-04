@@ -25,13 +25,12 @@ class GPT2(pl.LightningModule):
         self.betas = config["betas"]
 
         # Init the model
-        if config["model_checkpoint"].startswith("gpt2"):
-            chkp = config["model_checkpoint"]
+        if config["init_from"].startswith("gpt2"):
             self.gpt2 = GPT.from_pretrained(
-                model_type = chkp,
+                model_type = config["init_from"],
                 override_args = None
             )
-            print(f"Loaded GPT-2 from {chkp}.")
+            print(f"Loaded GPT-2 from {config["init_from"]}.")
         else:
             gptconfig = GPTConfig(
                 block_size=config["context_length"],
@@ -68,7 +67,7 @@ class GPT2(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self.step(batch, batch_idx)
-        self.log("train/ce", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train/ce", loss, on_step=True, on_epoch=False, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):

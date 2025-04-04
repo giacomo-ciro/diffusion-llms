@@ -1,10 +1,10 @@
 {
-    "model_checkpoint":"",
+    "init_from":"",
     "memmap_path": "./data/openwebtext_10k/train.bin",
-    "context_length": 32,
-    "n_embd": 16,
-    "n_layer": 4,
-    "n_head": 4, 
+    "context_length": 1024,
+    "n_embd": 768,
+    "n_layer": 12,
+    "n_head": 12, 
     
     "mask_ratio": 0.15,
     "n_epochs": 1,
@@ -19,5 +19,9 @@
     "train_val_test_split": [0.9, 0.05, 0.05],
 
     "wandb": true,
-    "run_name": ""
+    "run_name": "",
+    "project_name": "diffusion-llms",
+
+    "user_prompt": "Hello, what's your name?",
+    "n_samples": 1
 }
