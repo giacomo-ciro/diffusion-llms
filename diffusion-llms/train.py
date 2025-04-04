@@ -40,19 +40,20 @@ model = GPT2(CONFIG_PATH)
 
 # Init the trainer
 trainer = pl.Trainer(
-    max_epochs=config["n_epochs"],
-    # max_steps=config['n_steps'],
-    accelerator="auto",                     # recognizes device
-    devices="auto",                         # how many devices to use
-    precision='16-mixed',                          # to use amp 16
+    max_epochs=config["n_epochs"] if config["n_epochs"] else None,
+    max_steps=config['n_steps'],                # stops when one of the two is met
+    accelerator="auto",                         # recognizes device
+    devices="auto",                             # how many devices to use
+    precision='16-mixed',                       # to use amp 16
     logger=logger,
     log_every_n_steps=1,
-    check_val_every_n_epoch=1,              # run valid loop every 1 train loop
-    enable_checkpointing=False,             # if true, saves the most recent model after each epoch TODO: personalize checkpointing
+    check_val_every_n_epoch=1,                  # run valid loop every 1 train loop
+    enable_checkpointing=False,                 # if true, saves the most recent model after each epoch TODO: personalize checkpointing
     # callbacks=[progress_bar],
     enable_progress_bar=True,
-    # gradient_clip_val=1,
-    # accumulate_grad_batches=config['accumulate_grad'],
+    # gradient_clip_val=config["grad_clip"],      # Maximum norm of the gradients
+    # gradient_clip_algorithm='norm',             # 'norm' or 'value'
+    accumulate_grad_batches=config['accumulate_grad'],
 )
 
 # Train

@@ -1,10 +1,55 @@
 import json
-
+import math
 
 import torch
 import lightning as pl
-# from transformers import GPT2Config, GPT2Model
+from torch.optim.lr_scheduler import _LRScheduler
 from gpt2 import GPT, GPTConfig
+
+class CosineWarmupScheduler(_LRScheduler):
+    """
+    Warmup scheduler.
+    For the first warmup_steps iterations, progressively grows to max_lr.
+    Then gradually decays using cosine annealing to min_lr and keeps until the end. 
+    """
+    def __init__(
+        self, 
+        optimizer, 
+        config_path,
+        last_epoch=-1,
+    ):
+        with open(config_path, "r") as f:
+            self.config = json.load(f)
+
+        self.max_lr = self.config["max_lr"]
+        self.min_lr = self.config["min_lr"]
+        self.warmup_steps=self.config["warmup_steps"]
+        self.lr_decay_steps=self.config["lr_decay_steps"]
+        
+        super().__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+
+        it = self.last_epoch
+        
+        # 1) linear warmup for warmup_steps steps
+        if it < self.warmup_steps:
+            return [self.max_lr * (it + 1) / (self.warmup_steps + 1) 
+                    for _ in self.base_lrs]
+        
+        # 2) if it > lr_decay_steps, return min learning rate
+        if it > self.lr_decay_steps:
+            return [self.min_lr for _ in self.base_lrs]
+        
+        # 3) in between, use cosine decay down to min learning rate
+        decay_ratio = (it - self.warmup_steps) / (self.lr_decay_steps - self.warmup_steps)
+        assert 0 <= decay_ratio <= 1
+        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))  # coeff ranges 0..1
+        
+        return [
+            self.min_lr + coeff * (self.max_lr - self.min_lr) 
+            for _ in self.base_lrs
+        ]
 
 class GPT2(pl.LightningModule):
     """
@@ -17,26 +62,30 @@ class GPT2(pl.LightningModule):
     ):
         super().__init__()
 
+        self.config_path = config_path
         with open(config_path, "r") as f:
-            config = json.load(f)
+            self.config = json.load(f)
         
-        self.weight_decay = config["weight_decay"]
-        self.learning_rate = config["learning_rate"]
-        self.betas = config["betas"]
+        self.weight_decay = self.config["weight_decay"]
+        self.max_lr = self.config["max_lr"]
+        self.min_lr = self.config["min_lr"]
+        self.betas = self.config["betas"]
+        self.warmup_steps=self.config["warmup_steps"]
+        self.lr_decay_steps=self.config["lr_decay_steps"]
 
         # Init the model
-        if config["init_from"].startswith("gpt2"):
+        if self.config["init_from"].startswith("gpt2"):
             self.gpt2 = GPT.from_pretrained(
-                model_type = config["init_from"],
+                model_type = self.config["init_from"],
                 override_args = None
             )
-            print(f"Loaded GPT-2 from {config["init_from"]}.")
+            print(f"Loaded GPT-2 from {self.config["init_from"]}.")
         else:
             gptconfig = GPTConfig(
-                block_size=config["context_length"],
-                n_embd=config["n_embd"],
-                n_layer=config["n_layer"],
-                n_head=config["n_head"],
+                block_size=self.config["context_length"],
+                n_embd=self.config["n_embd"],
+                n_layer=self.config["n_layer"],
+                n_head=self.config["n_head"],
             )
             self.gpt2 = GPT(gptconfig)
             print("Initialized new GPT-2.")
@@ -78,21 +127,22 @@ class GPT2(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = self.gpt2.configure_optimizers(
             weight_decay=self.weight_decay,
-            learning_rate=self.learning_rate,
+            learning_rate=self.max_lr,
             betas=self.betas,
             device_type="cuda" if torch.cuda.is_available else "cpu"
         )
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, factor=0.1, patience=2, verbose=True
+        
+        scheduler = CosineWarmupScheduler(
+            optimizer,
+            self.config_path
         )
 
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "valid/ce",  # Metric to track
-                "interval": "epoch",
-                "frequency": 1,  # Check after each epoch
+                "interval": "step",
+                "frequency": 1,  # Check after each step
             },
         }
     
