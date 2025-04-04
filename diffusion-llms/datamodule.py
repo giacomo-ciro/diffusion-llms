@@ -70,7 +70,7 @@ class MemmapDataModule(pl.LightningDataModule):
         self.mask_ratio = self.config["mask_ratio"]
         self.batch_size = self.config["batch_size"]
         self.train_val_test_split = self.config["train_val_test_split"]
-        self.num_workers = os.cpu_count()-1
+        self.num_workers = 2
     
     def setup(self, stage=None):
         
