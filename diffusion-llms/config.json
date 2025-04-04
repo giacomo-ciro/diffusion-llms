@@ -7,15 +7,14 @@
     "n_head": 12, 
     
     "mask_ratio": 0.15,
-    "n_epochs": 10,
-    "batch_size": 4,
+    "n_epochs": 1,
+    "batch_size": 16,
     "weight_decay": 0.01,
     "learning_rate": 0.1,
     "betas": [0.9,0.99],
     "pad_id": -1,
     "mask_value": -1,
-
-    "dataset_sample_size": 100,
+    
     "train_val_test_split": [0.9, 0.05, 0.05],
 
     "wandb": true,
