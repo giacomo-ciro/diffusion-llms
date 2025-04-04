@@ -62,6 +62,7 @@ def format_file_size(tot_len):
 filename = f'train_{format_file_size(tot_len)}'
 arr = np.memmap(
     os.path.join(os.path.dirname(__file__), f'{filename}.bin'),
+    dtype=np.uint16,
     mode='w+',
     shape=(tot_len,)
 )
