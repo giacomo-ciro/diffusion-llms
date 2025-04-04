@@ -1,4 +1,4 @@
-data/
+*.bin
 lightning_logs/
 __pycache__/
 wandb/
