@@ -7,7 +7,7 @@
     "n_head": 12, 
     
     "mask_ratio": 0.15,
-    "n_epochs": 1,
+    "n_epochs": 10,
     "batch_size": 4,
     "weight_decay": 0.01,
     "learning_rate": 0.1,
@@ -19,7 +19,7 @@
     "train_val_test_split": [0.9, 0.05, 0.05],
 
     "wandb": true,
-    "run_name": "",
+    "run_name": "gpt2-scratch-openwebtext10k",
     "project_name": "diffusion-llms",
 
     "user_prompt": "Hello, what's your name?",
