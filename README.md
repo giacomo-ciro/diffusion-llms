@@ -6,6 +6,7 @@ Making LLMs inference faster with diffusion.
 - [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
 - [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
 - [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
+- [ ] Setup checkpointing (save weights and init from local weights)
 ## Overview
 ### Research Question
 We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
@@ -16,6 +17,7 @@ Compare attention weights between auto-regressive and diffusion models.
 ### Technical Soundness (Experimental Strategy)
 
 ## Rules
+### Branches
 Everybody **must** use its own branch during development, together we handle merges.
 
 Create a branch locally:
@@ -38,14 +40,24 @@ Check list of available branches
 ```
 git branch -a
 ```
+### Configuration file
+Please, duplicate `config.json`, rename to `local_config.json` (added to `.gitignore`) and modify this to test locally.
 
-## Sample from GPT-2
-Using the GPT-2 implementation from [Andrej Karpathy](https://github.com/karpathy/nanoGPT).
+## Usage
+### Sample from model
+In the `config.json` file.sing the GPT-2 implementation from [Andrej Karpathy](https://github.com/karpathy/nanoGPT).
 
-Download the weights of gpt-2 from huggingface, instantiate a `GPT()` model class from `model.py`, load `configurator.py` and sample from the model.
+Download the weights of gpt-2 from huggingface, instantiate a `GPT()` model class from `model.py`, load `configurator.py` and sample from the model. Specifying the prompt and the number of answers to generate.
+``` 
+cd diffusion-llms
+python sample.py path/to/config
+```
+
+### Train a model
+Specify in the `config.json` file the parameters of the training. The key `init_from` is used to specify the starting point. If one of `['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl']`, then it downloads the weights from huggingface and instantiate a pre-trained model. Any other value backs off to init from scratch. Then start the training:
 ```
 cd diffusion-llms
-python sample.py "Hello, what is your name?" 1
+python train.py path/to/config.json
 ```
 
 ## Repository Structure

@@ -9,7 +9,9 @@ from torch.utils.data import Dataset, DataLoader, random_split
 class MemmapTokenDataset(Dataset):
     """
     Reads data directly from disk using np.memmap. 
-    When accessed at ix, returns a sequence starting at that idx and the target one (shifted by 1)
+    When accessed using __getitem__(self, idx), returns a batch of (X, y)
+        X (tensor): a sequence of len context_length starting at idx
+        y (tensor): the same sequence shifted by 1
     """
     def __init__(
             self,
@@ -22,14 +24,17 @@ class MemmapTokenDataset(Dataset):
         self.context_length = context_length
         self.stride = stride if stride is not None else 1
         
-        # Calculate effective length
-        self.effective_length = (len(self.data) - context_length) // self.stride + 1
+        # Calculate effective length - ensure we can always get context_length + 1 tokens
+        # (for the shifted target sequence)
+        self.effective_length = max(0, (len(self.data) - (context_length + 1)) // self.stride + 1)
         
     def __len__(self):
         return self.effective_length
     
     def __getitem__(self, idx):
-        
+        if idx >= self.effective_length:
+            raise IndexError(f"Index {idx} out of bounds for dataset with {self.effective_length} samples")
+
         # Calculate start position based on stride
         start_idx = idx * self.stride
         

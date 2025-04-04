@@ -1,3 +1,4 @@
+import sys
 import json
 import wandb
 import lightning as pl
@@ -6,7 +7,11 @@ from datamodule import MemmapDataModule
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.callbacks import TQDMProgressBar
 
-CONFIG_PATH = "./config.json"
+if len(sys.argv) == 2:
+    CONFIG_PATH = sys.argv[1]
+else:
+    print("No path/to/config.json provided, defaulting to \'./config.json\'")
+    CONFIG_PATH = './config.json'
 
 # Configuration file
 with open(CONFIG_PATH, "r") as f:
@@ -16,13 +21,13 @@ with open(CONFIG_PATH, "r") as f:
 if config["wandb"]:
     wandb.login()
     run = wandb.init(
-        project="diffusion-llms",
+        project=config["project_name"],
         config=config,
         name=config["run_name"] if config["run_name"] else None,
     )
     wandb.define_metric("valid/mse", summary="min", step_metric="epoch")
     wandb.define_metric("valid/bce", summary="min", step_metric="epoch")
-    logger = WandbLogger(project="BioFormer")
+    logger = WandbLogger(project=config["project_name"])
 else:
     logger = CSVLogger(save_dir=".")
 
@@ -42,8 +47,8 @@ trainer = pl.Trainer(
     # max_steps=config['n_steps'],
     accelerator="auto",                     # recognizes device
     devices="auto",                         # how many devices to use
-    precision=16,                          # to use fp16
-    # logger=logger,
+    precision='16-mixed',                          # to use amp 16
+    logger=logger,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,              # run valid loop every 1 train loop
     enable_checkpointing=False,             # if true, saves the most recent model after each epoch TODO: personalize checkpointing
