@@ -1,5 +1,5 @@
 *.bin
-lightning_logs/
-__pycache__/
-wandb/
-local_config.json
+*/lightning_logs/
+*/__pycache__/
+*/wandb/
+*/local_config.json
