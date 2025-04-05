@@ -1,14 +1,13 @@
 {
-    "init_from":"",
+    "init_from": "",
     "memmap_path": "./data/openwebtext/train_1M.bin",
-    "context_length": 1024,
-    "n_embd": 768,
-    "n_layer": 12,
-    "n_head": 12, 
-    
+    "context_length": 64,  
+    "n_embd": 64,    
+    "n_layer": 4,     
+    "n_head": 4,   
     "n_epochs": 1,
-    "n_steps": 600000,
-
+    "n_steps": 500, 
+        
     "batch_size": 8,
     "accumulate_grad": 16,
     "grad_clip":1,
