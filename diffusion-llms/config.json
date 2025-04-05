@@ -1,5 +1,6 @@
 {
     "init_from":"",
+    "resume_training":true,
     "memmap_path": "./data/openwebtext/train_1M.bin",
     "context_length": 1024,
     "n_embd": 768,
@@ -23,8 +24,10 @@
     "mask_ratio": 0.15,
     "pad_id": -1,
     "mask_value": -1,
-    "train_val_test_split": [0.9, 0.05, 0.05],
+    "val_test_tokens": 1000,
 
+    "save_dir": "./checkpoints/",
+    "val_check_interval": 500,
     "wandb": true,
     "run_name": "gpt2-scratch-openwebtext",
     "project_name": "diffusion-llms",
