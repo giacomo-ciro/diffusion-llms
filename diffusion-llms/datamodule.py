@@ -69,7 +69,7 @@ class MemmapDataModule(pl.LightningDataModule):
         self.context_length = self.config["context_length"]
         self.mask_ratio = self.config["mask_ratio"]
         self.batch_size = self.config["batch_size"]
-        self.train_val_test_split = self.config["train_val_test_split"]
+        self.val_test_tokens = self.config["val_test_tokens"]
         self.num_workers = 2
     
     def setup(self, stage=None):
@@ -87,7 +87,8 @@ class MemmapDataModule(pl.LightningDataModule):
         # Split the dataset
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
             self.data,
-            self.train_val_test_split
+            # Use the given number for test and val, rest for token
+            [len(self.data) - 2*self.val_test_tokens, self.val_test_tokens, self.val_test_tokens]
         )
     
     def train_dataloader(self):
