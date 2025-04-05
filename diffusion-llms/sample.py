@@ -1,5 +1,5 @@
 import sys
-import ast
+import json
 
 import tiktoken
 from model import GPT2
@@ -13,6 +13,8 @@ else:
     print("No path/to/config.json provided, defaulting to \'./config.json\'")
     CONFIG_PATH = './config.json'
 
+with open(CONFIG_PATH, "r") as f:
+    config = json.load(f)
 # Tokenize
 enc = tiktoken.get_encoding("gpt2")
 encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
