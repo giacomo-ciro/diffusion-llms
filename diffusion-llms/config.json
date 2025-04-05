@@ -1,14 +1,14 @@
 {
     "init_from":"",
-    "resume_training":true,
-    "memmap_path": "./data/openwebtext/train_1M.bin",
+    "resume_training":false,
+    "memmap_path": "./data/openwebtext/train_113K.bin",
     "context_length": 1024,
     "n_embd": 768,
     "n_layer": 12,
     "n_head": 12, 
     
     "n_epochs": 1,
-    "n_steps": 600000,
+    "n_steps": 15000,
 
     "batch_size": 8,
     "accumulate_grad": 16,
@@ -18,16 +18,16 @@
     "weight_decay": 0.01,
     "min_lr": 6e-5,
     "max_lr": 6e-4,
-    "warmup_steps": 2000,
-    "lr_decay_fraction_n_steps": 0.9, 
+    "warmup_steps": 800,
+    "lr_decay_fraction_n_steps": 0.6, 
 
     "mask_ratio": 0.15,
     "pad_id": -1,
     "mask_value": -1,
-    "val_test_tokens": 1000,
+    "val_test_tokens": 10000,
 
     "save_dir": "./checkpoints/",
-    "val_check_interval": 500,
+    "val_check_interval": 1000,
     "wandb": true,
     "run_name": "gpt2-scratch-openwebtext",
     "project_name": "diffusion-llms",
