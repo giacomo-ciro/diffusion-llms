@@ -24,7 +24,12 @@ class CosineWarmupScheduler(_LRScheduler):
         self.max_lr = self.config["max_lr"]
         self.min_lr = self.config["min_lr"]
         self.warmup_steps=self.config["warmup_steps"]
-        self.lr_decay_steps=self.config["lr_decay_steps"]
+        
+        # Use the lr_decay_steps from the model if available
+        if optimizer.param_groups[0].get('lr_scheduler_state', {}).get('lr_decay_steps') is not None:
+            self.lr_decay_steps = optimizer.param_groups[0]['lr_scheduler_state']['lr_decay_steps']
+        else:
+            self.lr_decay_steps = self.config.get("lr_decay_steps", 100000)
         
         super().__init__(optimizer, last_epoch)
 
@@ -71,7 +76,31 @@ class GPT2(pl.LightningModule):
         self.min_lr = self.config["min_lr"]
         self.betas = self.config["betas"]
         self.warmup_steps=self.config["warmup_steps"]
-        self.lr_decay_steps=self.config["lr_decay_steps"]
+        
+        # Calculate lr_decay_steps if not explicitly provided
+        if "lr_decay_fraction" in self.config and "lr_decay_steps" not in self.config:
+            # Calculate based on total steps or epochs
+            if "n_steps" in self.config and self.config["n_steps"]:
+                total_steps = self.config["n_steps"]
+            elif "n_epochs" in self.config and self.config["n_epochs"]:
+                # Approximate total steps from epochs, batch size, and dataset size
+                # Note: This requires knowing dataset size ahead of time
+                batches_per_epoch = self.config.get("estimated_batches_per_epoch", 1000)
+                accumulate_grad = self.config.get("accumulate_grad", 1)
+                total_steps = self.config["n_epochs"] * batches_per_epoch // accumulate_grad
+            else:
+                # Default to some reasonable number if neither is specified
+                total_steps = 100000
+                
+            self.lr_decay_steps = int(total_steps * self.config["lr_decay_fraction"])
+            print(f"Automatically set lr_decay_steps to {self.lr_decay_steps} (={self.config['lr_decay_fraction']} × {total_steps} total steps)")
+        else:
+            # Use the explicitly provided value or default
+            self.lr_decay_steps = self.config.get("lr_decay_steps", 100000)
+
+        if "lr_decay_fraction" in self.config:
+            print(f"Automatically calculated lr_decay_steps = {self.lr_decay_steps}")
+            print(f"  Based on: {self.config['lr_decay_fraction']} × {total_steps} total steps")
 
         # Init the model
         if self.config["init_from"].startswith("gpt2"):
@@ -142,7 +171,12 @@ class GPT2(pl.LightningModule):
             betas=self.betas,
             device_type="cuda" if torch.cuda.is_available else "cpu"
         )
-        
+
+        # Store lr_decay_steps in optimizer state for the scheduler to access
+        for param_group in optimizer.param_groups:
+            param_group.setdefault('lr_scheduler_state', {})
+            param_group['lr_scheduler_state']['lr_decay_steps'] = self.lr_decay_steps        
+
         scheduler = CosineWarmupScheduler(
             optimizer,
             self.config_path

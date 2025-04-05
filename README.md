@@ -3,12 +3,13 @@ Making LLMs inference faster with diffusion.
 
 ## TODOs
 - [x] ~~Setup WandB project and logging~~
-- [x] Update README with wandB instructions
-- [ ] Compute lr decay steps automatically (e.g. 0.6 of total steps)
+- [x] ~~Update README with wandB instructions~~
+- [x] ~~Compute lr decay steps automatically (e.g. 0.6 of total steps)~~
 - [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
 - [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
 - [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
 - [ ] Setup checkpointing (save weights and init from local weights)
+- [ ] Update README with instructions for running on HPC
 
 ## Overview
 ### Research Question
@@ -57,6 +58,17 @@ $ cd diffusion-llms
 $ python sample.py path/to/config
 ```
 
+#### Using a saved checkpoint from training
+Modify `sample.py` to add:
+```python
+from lightning.pytorch import LightningModule
+model = GPT2.load_from_checkpoint("path/to/checkpoint.ckpt", config_path=CONFIG_PATH)
+```
+
+The configuration file should specify:
+- `user_prompt`: The text to use as a starting point
+- `n_samples`: How many text samples to generate
+
 ### Train a model
 Specify in the `config.json` file the parameters of the training. The key `init_from` is used to specify the starting point. If one of `['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl']`, then it downloads the weights from huggingface and instantiate a pre-trained model. Any other value backs off to init from scratch. Then start the training:
 ```
@@ -73,16 +85,23 @@ $ python
 ```
 
 ## Repository Structure
-```zsh
+```bash
 ├── diffusion-llms/ 
 │   ├── __pycache__/
-│   ├── config.json
-│   ├── configurator.py 
-│   ├── gpt2.py 
-│   ├── main.py 
-│   ├── model.py 
-│   ├── sample.py
-│   └── train.py
+│   ├── data/openwebtext/ 
+│       ├── prepare.py      # Script for tokenizing and preparing dataset
+│       ├── train_1M.bin
+│       ├── train_1M.txt
+│       └── etc.
+│   ├── wandb/              # Weights & Biases logging data
+│   ├── config.json         # Default configuration file
+│   ├── configurator.py     # Configuration utilities
+│   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
+│   ├── gpt2.py             # Core GPT-2 model architecture
+│   ├── main.ipynb          # only for testing, ignore
+│   ├── model.py            # PyTorch Lightning wrapper for GPT-2
+│   ├── sample.py           # Text generation script
+│   └── train.py            # Main training script
 ├── papers/
 ├── .gitignore
 ├── LICENSE
