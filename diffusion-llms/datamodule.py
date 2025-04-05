@@ -97,7 +97,8 @@ class MemmapDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            pin_memory=True
+            pin_memory=True,
+            persistent_workers=True if self.num_workers > 0 else False
         )
     
     def val_dataloader(self):
@@ -106,7 +107,8 @@ class MemmapDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
-            pin_memory=True
+            pin_memory=True,
+            persistent_workers=True if self.num_workers > 0 else False
         )
     
     def test_dataloader(self):

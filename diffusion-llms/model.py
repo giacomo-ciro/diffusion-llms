@@ -25,11 +25,7 @@ class GPT2(pl.LightningModule):
         
         # Get parameters
         self.weight_decay = self.config["weight_decay"]
-        self.max_lr = self.config["max_lr"]
-        self.min_lr = self.config["min_lr"]
         self.betas = self.config["betas"]
-        self.warmup_steps=self.config["warmup_steps"]
-        self.lr_decay_steps=self.config["lr_decay_steps"]
 
         # Init the model
         # Pre-trained from hugging face
@@ -99,7 +95,8 @@ class GPT2(pl.LightningModule):
         # X is token idx, (B, T)
         # y is idx shifted by one, (B, T)
         X, y = batch
-        X, y = X.to(torch.int64), y.to(torch.int64)
+        X = X.cpu().to(torch.int64).to(self.device)
+        y = y.cpu().to(torch.int64).to(self.device)
 
         logits, loss = self.forward(X, y)
         
@@ -128,11 +125,11 @@ class GPT2(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = self.gpt2.configure_optimizers(
             weight_decay=self.weight_decay,
-            learning_rate=self.max_lr,
+            learning_rate=self.config["max_lr"],
             betas=self.betas,
             device_type="cuda" if torch.cuda.is_available else "cpu"
-        )
-        
+        )        
+
         scheduler = CosineWarmupScheduler(
             optimizer,
             self.config_path
@@ -173,7 +170,7 @@ class CosineWarmupScheduler(_LRScheduler):
         self.max_lr = self.config["max_lr"]
         self.min_lr = self.config["min_lr"]
         self.warmup_steps=self.config["warmup_steps"]
-        self.lr_decay_steps=self.config["lr_decay_steps"]
+        self.lr_decay_steps= int(self.config["lr_decay_fraction_n_steps"] * self.config["n_steps"])
         
         super().__init__(optimizer, last_epoch)
 

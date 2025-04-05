@@ -4,7 +4,7 @@ import json
 import tiktoken
 from model import GPT2
 
-CONFIG_PATH = "./config.json"
+CONFIG_PATH = "./dave_config.json"
 
 # From the command line we can specify the config.file
 if len(sys.argv) == 2:

@@ -19,7 +19,7 @@
     "min_lr": 6e-5,
     "max_lr": 6e-4,
     "warmup_steps": 2000,
-    "lr_decay_steps": 100000, 
+    "lr_decay_fraction_n_steps": 0.9, 
 
     "mask_ratio": 0.15,
     "pad_id": -1,

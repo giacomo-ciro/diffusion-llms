@@ -86,7 +86,7 @@ for sample in tqdm(tokenized, desc="Writing to .bin"):
 with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
     f.write(
         f"""Generated on: {time.strftime("%d-%m-%Y %H:%M:%S")}
-Using: $ python prepare.py {SAMPLE_SIZE}
-Tot number of tokens: {tot_len:,}
-"""
+        Using: $ python prepare.py {SAMPLE_SIZE}
+        Tot number of tokens: {tot_len:,}
+        """
     )
