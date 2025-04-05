@@ -108,7 +108,8 @@ class GPT2(pl.LightningModule):
         # X is token idx, (B, T)
         # y is idx shifted by one, (B, T)
         X, y = batch
-        X, y = X.to(torch.int64), y.to(torch.int64)
+        X = X.cpu().to(torch.int64).to(self.device)
+        y = y.cpu().to(torch.int64).to(self.device)
 
         logits, loss = self.forward(X, y)
         
