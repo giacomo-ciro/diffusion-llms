@@ -55,7 +55,7 @@ checkpointer = ModelCheckpoint(
 # Save model config
 os.mkdir(dirpath)
 with open(os.path.join(dirpath, "config.json"), "w") as f:
-    json.dump(config, f)
+    json.dump(config, f, indent = 2)
 
 # Early Stopping
 early_stopping = EarlyStopping(
