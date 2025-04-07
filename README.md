@@ -18,6 +18,12 @@ We explored previous research trying to overcome the issue with fixed-length out
 ### Notes
 When running on hpc, gpt2 small with batch_size = 8 is the largest it can be (using both 1080 gpus...)
 
+Sample response from `checkpoints/ymd_250405_HMS_21_15_27/epoch_0_ce_1.86.ckpt` to the prompt `Hello, what's your name?`:
+```
+D-par can come to make push is creatures movie The increases in the my partner for the New Leaf - 28, casual fans of those minor surgery on 1994 philosophy by the hand. From the other countries where they outlined an independent son, a lot more�/11.
+
+But there“Lots of different types of the inclusion of course, something terrible, apologetic - but by publishers action
+```
 #### IDEA FOR NLP
 Compare attention weights between auto-regressive and diffusion models.
 
