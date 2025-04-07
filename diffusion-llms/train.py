@@ -7,7 +7,7 @@ import lightning as pl
 from model import GPT2
 from datamodule import MemmapDataModule
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
-from lightning.pytorch.callbacks import TQDMProgressBar, ModelCheckpoint, EarlyStopping
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from utils import check_config_validity
 # From the command line we can specify the config.file
 if len(sys.argv) == 2:
@@ -31,8 +31,7 @@ if config["wandb"]:
         config=config,
         name=config["run_name"] if config["run_name"] else None,
     )
-    wandb.define_metric("valid/mse", summary="min", step_metric="epoch")
-    wandb.define_metric("valid/ce", summary="min", step_metric="epoch")
+    wandb.define_metric("valid/ce", summary="min", step_metric="step")
     logger = WandbLogger(project=config["project_name"])
 else:
     logger = CSVLogger(save_dir=".")
