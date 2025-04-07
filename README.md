@@ -94,6 +94,7 @@ $ python
 ```bash
 ├── diffusion-llms/ 
 │   ├── __pycache__/
+│   ├── checkpoints/        # Checkpoint files for model weights
 │   ├── data/openwebtext/ 
 │       ├── prepare.py      # Script for tokenizing and preparing dataset
 │       ├── train_1M.bin
@@ -107,11 +108,13 @@ $ python
 │   ├── main.ipynb          # only for testing, ignore
 │   ├── model.py            # PyTorch Lightning wrapper for GPT-2
 │   ├── sample.py           # Text generation script
-│   └── train.py            # Main training script
+│   ├── train.py            # Main training script
+│   └── utils.py            
 ├── papers/
 ├── .gitignore
 ├── LICENSE
-└── README.md
+├── README.md
+└── requirements.txt
 ```
 
 ## Virtual Environment (conda)
@@ -127,15 +130,8 @@ conda activate dl-nlp
 Install the necessary packages using `pip`:
 
 ```bash
-python -m pip install torch tiktoken lightning transformers wandb
+python -m pip install -r requirements.txt
 ```
-
-These are required for:
-- `torch`: deep learning (model, training, tensor ops)
-- `tiktoken`: tokenizer used by OpenAI models
-- `lightning`: PyTorch Lightning for training loop abstraction
-- `transformers`: Hugging Face Transformers library for pre-trained models and tokenizers
-- `wandb`: Weights & Biases for experiment tracking and visualization
 
 > Using `python -m pip` ensures that packages are installed in the environment linked to your current Python interpreter, avoiding issues with multiple Python installations.
 

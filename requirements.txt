@@ -4,3 +4,4 @@ wandb
 numpy
 tiktoken
 datasets
+transformers
