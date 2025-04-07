@@ -4,8 +4,6 @@ import json
 import tiktoken
 from model import GPT2
 
-CONFIG_PATH = "./dave_config.json"
-
 # From the command line we can specify the config.file
 if len(sys.argv) == 2:
     CONFIG_PATH = sys.argv[1]
@@ -17,8 +15,10 @@ with open(CONFIG_PATH, "r") as f:
     config = json.load(f)
 # Tokenize
 enc = tiktoken.get_encoding("gpt2")
-encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
-decode = lambda l: enc.decode(l)
+def encode(x):
+    return enc.encode(x, allowed_special={"<|endoftext|>"})
+def decode(x):
+    return enc.decode(x)
 prompt_idx = encode(config["user_prompt"])
 
 # Load model
