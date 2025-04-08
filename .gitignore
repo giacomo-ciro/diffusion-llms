@@ -4,6 +4,7 @@
 */wandb/
 */local_config.json
 *.ckpt
+*/venv/
 
 .DS_Store
 .env
