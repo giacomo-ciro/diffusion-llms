@@ -29,10 +29,11 @@
     "save_dir": "./checkpoints/",
     "val_check_interval": 1000,
     "wandb": true,
+    "wandb_entity": "bocconi-diffusion-llms",
     "strategy": "ddp",
     "gpus": 2,
     "run_name": "gpt2-scratch-openwebtext",
-    "project_name": "diffusion-llms",
+    "project_name": "bocconi-diffusion-llms",
 
     "user_prompt": "Hello, what's your name?",
     "n_samples": 1

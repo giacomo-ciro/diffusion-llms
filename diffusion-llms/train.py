@@ -9,6 +9,10 @@ from datamodule import MemmapDataModule
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from utils import check_config_validity
+from dotenv import load_dotenv
+
+load_dotenv('../.env')
+
 # From the command line we can specify the config.file
 if len(sys.argv) == 2:
     CONFIG_PATH = sys.argv[1]
@@ -28,6 +32,7 @@ if config["wandb"]:
     wandb.login()
     run = wandb.init(
         project=config["project_name"],
+        entity=config["wandb_entity"],
         config=config,
         name=config["run_name"] if config["run_name"] else None,
     )
@@ -69,7 +74,6 @@ early_stopping = EarlyStopping(
 
 # Init the trainer
 trainer = pl.Trainer(
-    gpus=config.get("gpus"),                    # Number of GPUs to use
     strategy=config.get("strategy"),            # Distributed training strategy
     max_epochs=config["n_epochs"] if config["n_epochs"] else None,
     max_steps=config['n_steps'],                # stops when one of the two is met
