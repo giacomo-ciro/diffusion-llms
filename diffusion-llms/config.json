@@ -1,4 +1,7 @@
 {
+    "pipeline": "diffusion",
+    "attn_annealing_steps": 0.8,
+    
     "init_from":"",
     "resume_training":false,
     "memmap_path": "./data/openwebtext/train_113K.bin",
