@@ -15,6 +15,13 @@ Making LLMs inference faster with diffusion.
 ### Research Question
 We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
 
+### Discrete Diffusion Framework
+Training step for diffusion model:  
+    1. Input sequence $X\in\mathbb{R}^n$ of integers  
+    2. Sample $t \sim U(0,1)$  
+    3. Mask each token in the input sequence with probability $t$  
+    4. Pass to the model to get logits for all  
+    5. Measure cross entropy loss only on masked tokens  
 ### Notes
 When running on hpc, gpt2 small with batch_size = 8 is the largest it can be (using both 1080 gpus...)
 
