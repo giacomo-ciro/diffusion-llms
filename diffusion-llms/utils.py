@@ -11,6 +11,15 @@ def check_config_validity(
     if config["n_embd"] % config["n_head"] != 0:
         message += "n_heads must be a divisor of n_embd" + "\n"
     
+    tmp = {"diffusion", "arm"}
+    if config["pipeline"] not in tmp:
+        message += "pipeline must be in {tmp}" + "\n"
+    
+    if config["pipeline"] == "diffusion":
+        if not config["attn_annealing_steps"] >= 0:
+            message += "attn_annealing_steps > 0 required when pipeline == diffusion"
+    
+    
     # TODO: check validity of all other arguments
 
     if message:
