@@ -75,11 +75,14 @@ class GPT2(pl.LightningModule):
             attn_mask = attn_mask
         ).logits
 
-        # TODO: comupute loss 
-        loss = torch.nn.functional.cross_entropy(
-            input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
-            target = targets.reshape(-1),   # (B, context_length) -> (B*context_length,)
-        )
+        if self.config["pipeline"] == "diffusion":
+            # TODO: comupute loss 
+            pass
+        else:
+            loss = torch.nn.functional.cross_entropy(
+                input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
+                target = targets.reshape(-1),   # (B, context_length) -> (B*context_length,)
+            )
 
         return logits, loss
 
