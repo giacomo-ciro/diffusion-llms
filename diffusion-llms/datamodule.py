@@ -49,7 +49,7 @@ class MemmapTokenDataset(Dataset):
         #     size=(sequence.shape[0],), 
         #     dtype=torch.float32
         # ) < 0.15
-
+        # Both are (context_length,)
         return torch.from_numpy(X), torch.from_numpy(y)
     
 class MemmapDataModule(pl.LightningDataModule):
@@ -80,9 +80,8 @@ class MemmapDataModule(pl.LightningDataModule):
             self.context_length
         )
         else:
-            # TODO: create the memmap if the required data is not available
-            raise NotImplementedError(f"Unable to find {self.memmap_path}, please create it using prepare.py")
-        
+            print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
+            exit()
         
         # Split the dataset
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(

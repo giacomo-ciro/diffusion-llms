@@ -24,11 +24,12 @@ class GPT2(pl.LightningModule):
 
         # Init the model
         # Pre-trained from hugging face
-        if self.config["init_from"].startswith("gpt2"):
-            assert self.config["init_from"] in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
-            print(f"Loading pre-trained {self.config["init_from"]}...")
+        init_from = self.config["init_from"]
+        if init_from.startswith("gpt2"):
+            assert init_from in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
+            print(f"Loading pre-trained {init_from}...")
             self.gpt2 = GPT2LMHeadModel.from_pretrained(
-                pretrained_model_name_or_path = self.config["init_from"]
+                pretrained_model_name_or_path = init_from
             )
         
         # A new version from scratch
@@ -52,47 +53,57 @@ class GPT2(pl.LightningModule):
                 1,
                 self.config["attn_annealing_steps"]
             )
+        
     def forward(
         self,
-        input_ids,
-        attn_mask=None
+        input_ids:torch.Tensor,
+        targets:torch.Tensor,
+        attn_mask:torch.Tensor=None
     ) -> tuple:
         
         # Logging
-        non_zero_mask = attn_mask.sum().item()
-        self.log("non_zero_mask", non_zero_mask)
+        # Store the percentage of the non_zero entries in the mask
+        non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
+        self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
 
-        # If labels provided, are automatically shifted, 
-        # hence set labels = input_ids
+        # If labels provided, gpt2 automatically shifts them to 
+        # compute the loss (here we do it manually) and returns 
+        # a CausalLMOutputWithCrossAttentions object, with 
+        # attribute .logits
         logits = self.gpt2.forward(
             input_ids = input_ids,
-            attn_mask=attn_mask
+            attn_mask = attn_mask
         ).logits
 
         # TODO: comupute loss 
-        loss = 0.0
+        loss = torch.nn.functional.cross_entropy(
+            input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
+            target = targets.reshape(-1),   # (B, context_length) -> (B*context_length,)
+        )
 
-        return non_zero_mask
+        return logits, loss
 
     def training_step(self, batch, batch_idx):
         
         # Read in batch
-        X, y = batch
-        X = X.cpu().to(torch.int64).to(self.device)
-        y = y.cpu().to(torch.int64).to(self.device)
+        input_ids, targets = batch        
+        input_ids = input_ids.cpu().to(torch.int64).to(self.device) # (B, context_length)
+        targets = targets.cpu().to(torch.int64).to(self.device) # (B, context_length)
 
         # Prepare the attention mask:
-        attn_mask = torch.tril(torch.ones(X.shape[1], X.shape[1]), device = X.device).to(torch.bool)
-        if self.config["pipeline"] == "diffusion": 
+        B, _ = input_ids.shape
+        attn_mask = torch.tril(torch.ones(B, B)).to(input_ids.device).to(torch.bool)
+        if (self.config["pipeline"] == "diffusion" and
+            self.global_step < len(self.annealing_schedule)):  # if we are still in the annealing phase
             p = self.annealing_schedule[self.global_step]
-            attn_unmask = torch.rand(size=(X.shape[1], X.shape[1]), device = X.device) <= p
+            attn_unmask = torch.rand(size=(B, B), device = input_ids.device) <= p
             attn_mask = attn_mask | attn_unmask
 
         # Forward pass
-        loss = self.forward(batch, batch_idx)
+        logits, loss = self.forward(input_ids, targets, attn_mask)
         
         # Logging
-        self.log("train/ce", loss, on_step=True, on_epoch=False, prog_bar=True)
+        self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
         current_lr = self.optimizers().param_groups[0]['lr']
         self.log('learning_rate', current_lr, prog_bar=True, on_step=True, on_epoch=False)
 
@@ -101,18 +112,19 @@ class GPT2(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         
         # Read in batch
-        X, y = batch
-        X = X.cpu().to(torch.int64).to(self.device)
-        y = y.cpu().to(torch.int64).to(self.device)
+        input_ids, targets = batch
+        input_ids = input_ids.cpu().to(torch.int64).to(self.device)
+        targets = targets.cpu().to(torch.int64).to(self.device)
 
-        # Can see everything when validation
-        attn_mask = torch.ones(X.shape[1], X.shape[1]).to(X.device).to(torch.bool)
+        # Can see everything at validation
+        B, _ = input_ids.shape
+        attn_mask = torch.tril(torch.ones(B, B)).to(input_ids.device).to(torch.bool)
         
         # Forward pass
-        loss = self.forward(X, attn_mask=attn_mask)
+        logits, loss = self.forward(input_ids, targets, attn_mask)
         
         # Logging
-        self.log("valid/ce", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("valid/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         
         return loss
 
@@ -144,7 +156,7 @@ class GPT2(pl.LightningModule):
         # Optimizer
         optimizer = torch.optim.AdamW(
             params=optim_groups,
-            learning_rate=self.config["max_lr"],
+            lr=self.config["max_lr"],
             betas = self.config["betas"],
             fused=True
         )        
@@ -154,7 +166,7 @@ class GPT2(pl.LightningModule):
             optimizer,
             max_lr=self.config["max_lr"],
             total_steps=self.config["n_steps"],
-            pct_start=self.config["pct_start"],  # Warm-up percentage of total steps
+            pct_start=self.config["warmup_pct"],  # Warm-up percentage of total steps
             div_factor=self.config["div_factor"],  # Determines initial_lr = max_lr / div_factor
             final_div_factor=self.config["final_div_factor"],  # Determines min_lr = initial_lr / final_div_factor
             anneal_strategy="cos",
