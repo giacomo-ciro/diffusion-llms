@@ -36,7 +36,7 @@ if config["wandb"]:
         config=config,
         name=config["run_name"] if config["run_name"] else None,
     )
-    wandb.define_metric("valid/ce", summary="min", step_metric="step")
+    wandb.define_metric("valid/loss", summary="min", step_metric="step")
     logger = WandbLogger(project=config["project_name"])
 else:
     logger = CSVLogger(save_dir=".")
@@ -51,9 +51,9 @@ model = GPT2(CONFIG_PATH)
 dirpath = config["save_dir"] + time.strftime("ymd_%y%m%d_HMS_%H_%M_%S")
 checkpointer = ModelCheckpoint(
     dirpath=dirpath,  # Directory to save checkpoints
-    filename='epoch_{epoch}_ce_{valid/ce:.2f}',            # Checkpoint filename format
+    filename='epoch_{epoch}_ce_{valid/loss:.2f}',            # Checkpoint filename format
     save_top_k=-1,                                                          # Save the 3 best models
-    monitor='valid/ce',                                                     # Metric to monitor
+    monitor='valid/loss',                                                     # Metric to monitor
     mode='min',                                                             # Mode ('min' for loss, 'max' for accuracy)
     auto_insert_metric_name=False,
 )
@@ -64,7 +64,7 @@ with open(os.path.join(dirpath, "config.json"), "w") as f:
 
 # Early Stopping
 early_stopping = EarlyStopping(
-    monitor='valid/ce',             # Monitor validation cross-entropy loss
+    monitor='valid/loss',             # Monitor validation cross-entropy loss
     patience=2,                     # Number of validation checks with no improvement after which training will stop
     min_delta=0.001,                # Minimum change in monitored value to qualify as improvement
     mode='min',                     # We want to minimize the loss

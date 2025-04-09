@@ -5,3 +5,5 @@ numpy
 tiktoken
 datasets
 python-dotenv
+transformers
+tiktoken

@@ -1,5 +1,5 @@
 {
-    "pipeline": "diffusion",
+    "pipeline": "arm",
     "attn_annealing_steps": 1000,
     
     "init_from":"",
