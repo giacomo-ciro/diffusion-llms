@@ -27,6 +27,9 @@ But there“Lots of different types of the inclusion of course, something terrib
 #### IDEA FOR NLP
 Compare attention weights between auto-regressive and diffusion models.
 
+> from NLP slides `01_intro`: Graded on data set size, correctness of implementations, annotation
+quality, performance, originality, and ambition
+
 ## Rules
 ### Branches
 Everybody **must** use its own branch during development, together we handle merges.
@@ -55,8 +58,24 @@ git branch -a
 Please, duplicate `config.json`, rename to `local_config.json` (added to `.gitignore`) and modify this to test locally.
 
 ## Usage
+
+### WandB login
+To use wandb, you must login (locally or on hpc). From the CLI, run the following (and follow the prompts):
+```
+$ python
+>>> import wandb
+>>> wandb.login()
+```
+
+### Train a model
+Specify in the `config.json` file the parameters of the training. The key `init_from` is used to specify the starting point. If one of `['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl']`, then it downloads the weights from huggingface and instantiate a pre-trained model. Any other value backs off to init from scratch. Then start the training:
+```
+cd diffusion-llms
+python train.py path/to/config.json
+```
+
 ### Sample from model
-In the `config.json` file.sing the GPT-2 implementation from [Andrej Karpathy](https://github.com/karpathy/nanoGPT).
+In the `config.json` file using the GPT-2 implementation from [Andrej Karpathy](https://github.com/karpathy/nanoGPT).
 
 Download the weights of gpt-2 from huggingface, instantiate a `GPT()` model class from `model.py`, load `configurator.py` and sample from the model. Specifying the prompt and the number of answers to generate.
 ``` 
@@ -75,32 +94,15 @@ The configuration file should specify:
 - `user_prompt`: The text to use as a starting point
 - `n_samples`: How many text samples to generate
 
-### Train a model
-Specify in the `config.json` file the parameters of the training. The key `init_from` is used to specify the starting point. If one of `['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl']`, then it downloads the weights from huggingface and instantiate a pre-trained model. Any other value backs off to init from scratch. Then start the training:
-```
-cd diffusion-llms
-python train.py path/to/config.json
-```
-
-### WandB login
-To use wandb, you must login (locally or on hpc). From the CLI, run the following (and follow the prompts):
-```
-$ python
->>> import wandb
->>> wandb.login()
-```
-
 ## Repository Structure
 ```bash
 ├── diffusion-llms/ 
-│   ├── __pycache__/
 │   ├── checkpoints/        # Checkpoint files for model weights
 │   ├── data/openwebtext/ 
 │       ├── prepare.py      # Script for tokenizing and preparing dataset
 │       ├── train_1M.bin
 │       ├── train_1M.txt
 │       └── etc.
-│   ├── wandb/              # Weights & Biases logging data
 │   ├── config.json         # Default configuration file
 │   ├── configurator.py     # Configuration utilities
 │   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
