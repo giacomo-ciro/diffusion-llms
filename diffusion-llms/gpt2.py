@@ -179,6 +179,8 @@ class GPT(nn.Module):
         x = self.transformer.drop(tok_emb + pos_emb)
         for block in self.transformer.h:
             x = block(x)
+            # TODO: unpack the block, and pass mask argument to attention
+            # -> create global variable to store the current attn annealing step in training
         x = self.transformer.ln_f(x)
 
         if targets is not None:
