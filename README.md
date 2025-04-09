@@ -8,8 +8,10 @@ Making LLMs inference faster with diffusion.
 - [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
 - [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
 - [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
-- [ ] Setup checkpointing (save weights and init from local weights)
+- [ ] Setup init from local weights
 - [ ] Update README with instructions for running on HPC
+- [x] ~~Implement attention mask annealing~~
+- [ ] Adapt datamodule to diffusion pipeline
 
 ## Overview
 ### Research Question
