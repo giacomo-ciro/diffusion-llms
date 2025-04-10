@@ -1,6 +1,7 @@
 {
     "pipeline": "arm",
     "attn_annealing_steps": 1000,
+    "mask_id": 10541,
     
     "init_from":"",
     "resume_training":false,
