@@ -11,7 +11,8 @@ Making LLMs inference faster with diffusion.
 - [ ] Setup init from local weights
 - [ ] Update README with instructions for running on HPC
 - [x] ~~Implement attention mask annealing~~
-- [ ] Adapt datamodule to diffusion pipeline
+- [x] ~~Adapt datamodule to diffusion pipeline~~
+- [ ] Check the implementation of discrete diffusion training works as expected
 
 ## Overview
 ### Research Question
