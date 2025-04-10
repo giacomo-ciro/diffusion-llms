@@ -29,6 +29,7 @@
     "mask_value": -1,
     "val_test_tokens": 10000,
 
+    "enable_checkpointing": true,
     "save_dir": "./checkpoints/",
     "val_check_interval": 1000,
     "wandb": true,
