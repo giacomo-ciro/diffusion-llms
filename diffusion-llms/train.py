@@ -31,7 +31,6 @@ if config["wandb"]:
         config=config,
         name=config["run_name"] if config["run_name"] else None,
     )
-    wandb.define_metric("valid/loss", summary="min", step_metric="step")
     logger = WandbLogger(project=config["project_name"])
 else:
     logger = CSVLogger(save_dir=".")

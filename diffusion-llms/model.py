@@ -127,10 +127,20 @@ class GPT2(pl.LightningModule):
         logits, loss = self.forward(input_ids, targets, input_mask, attn_mask)
         
         # Logging
-        self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
-        current_lr = self.optimizers().param_groups[0]['lr']
-        self.log('learning_rate', current_lr, prog_bar=True, on_step=True, on_epoch=False)
-
+        self.log(
+            "train/loss",
+            loss,
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            "train/learning_rate",
+            self.optimizers().param_groups[0]['lr'],
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -152,7 +162,13 @@ class GPT2(pl.LightningModule):
         logits, loss = self.forward(input_ids, targets, input_mask, attn_mask)
         
         # Logging
-        self.log("valid/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "valid/loss",
+            loss,
+            on_step=False,  # Logs the metric at the current step
+            on_epoch=True,  # Automatically accumulates and logs at the end of the epoch
+            prog_bar=True,  # Log to the progbar
+        )
         
         return loss
 
