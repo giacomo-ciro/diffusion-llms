@@ -4,7 +4,7 @@ import os
 import torch
 import numpy as np
 import lightning as pl
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader
 
 class MemmapTokenDataset(Dataset):
     """
@@ -17,16 +17,16 @@ class MemmapTokenDataset(Dataset):
             self,
             memmap_path,
             context_length,
-            stride=None
+            is_arm_training: bool = True,
         ):
 
         self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
         self.context_length = context_length
-        self.stride = stride if stride is not None else 1
+        self.is_arm_training = is_arm_training
         
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
-        self.effective_length = max(0, (len(self.data) - (context_length + 1)) // self.stride + 1)
+        self.effective_length = max(0, (len(self.data) - (context_length + 1)) + 1)
         
     def __len__(self):
         return self.effective_length
@@ -34,23 +34,30 @@ class MemmapTokenDataset(Dataset):
     def __getitem__(self, idx):
         if idx >= self.effective_length:
             raise IndexError(f"Index {idx} out of bounds for dataset with {self.effective_length} samples")
-
-        # Calculate start position based on stride
-        start_idx = idx * self.stride
         
         # Get sequence of indices
-        X = self.data[start_idx:start_idx + self.context_length].copy()
+        # of shape (context_length,)
+        X = self.data[idx:idx + self.context_length].copy()
 
         # Shifted by 1
-        y = self.data[start_idx+1:start_idx + self.context_length+1].copy()
+        # of shape (context_length,)
+        y = self.data[idx+1:idx + self.context_length+1].copy()
         
-        # Random mask
-        # mask = torch.rand(
-        #     size=(sequence.shape[0],), 
-        #     dtype=torch.float32
-        # ) < 0.15
-        # Both are (context_length,)
-        return torch.from_numpy(X), torch.from_numpy(y)
+        # If autoregressive training, return X,y
+        if self.is_arm_training:
+            return torch.from_numpy(X), torch.from_numpy(y)
+        
+        # Random mask for the output sequence
+        # of shape # (context_length,)
+        t = torch.rand(1).item()
+        mask = torch.rand(
+            size=(y.shape[0],), 
+            dtype=torch.float32
+        ) < t
+
+        return X, y, mask
+        
+        
     
 class MemmapDataModule(pl.LightningDataModule):
     """

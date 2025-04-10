@@ -125,9 +125,13 @@ class GPT2(pl.LightningModule):
         input_ids = input_ids.cpu().to(torch.int64).to(self.device)
         targets = targets.cpu().to(torch.int64).to(self.device)
 
-        # Can see everything at validation
+        # Attention mask
         B, context_length = input_ids.shape
-        attn_mask = get_annealing_mask(context_length, B, 1.0).to(input_ids.device)
+        if self.config["pipeline"] == "diffusion":
+            # can see everything at validation
+            attn_mask = get_annealing_mask(context_length, B, 1.0).to(input_ids.device)
+        else:
+            attn_mask = get_causal_mask(context_length, B)
         
         # Forward pass
         logits, loss = self.forward(input_ids, targets, attn_mask=attn_mask)
