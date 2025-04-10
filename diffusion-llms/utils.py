@@ -1,4 +1,39 @@
+import torch
 import sys
+
+def get_annealing_mask(
+        context_length:int,
+        B:int,
+        p:int
+    )-> torch.Tensor:
+    """
+    Returns the annealed mask of shape [B, 1, context_length, context_length] 
+    to be broadcasted to the attention heads.
+        - context_length (int): the context length
+        - B (int): the batch size
+        - p (int): the probability of unmasking an entry in the attention 
+                   mask (p=1.0 allows the model to see everything) in the 
+                   annealed mask will be unmasked.
+    """
+    attn_mask = torch.tril(torch.ones(context_length, context_length)).to(torch.bool)        
+    random_mask = torch.rand(size=(context_length, context_length)) <= p
+    anneal_mask = torch.logical_or(attn_mask, random_mask)
+    expanded_mask = anneal_mask[None, None, :, :].expand(B, 1, context_length, context_length)
+    return expanded_mask
+
+def get_causal_mask(\
+        context_length:int,
+        B:int
+    )-> torch.Tensor:
+    """
+    Return the casual mask (lower triangular) of shape [B, 1, context_length, context_length] 
+    to be broadcasted to the attention heads.
+        - context_length (int): the context length
+        - B (int): the batch size
+    """
+    attn_mask = torch.tril(torch.ones(context_length, context_length)).to(torch.bool)        
+    expanded_mask = attn_mask[None, None, :, :].expand(B, 1, context_length, context_length)
+    return expanded_mask
 
 def check_config_validity(
         config:dict
