@@ -5,6 +5,12 @@ import torch
 import lightning as pl
 from torch.optim.lr_scheduler import OneCycleLR
 from transformers import GPT2LMHeadModel, GPT2Config
+from attention_patch import replace_attention_mask
+from utils import get_annealing_mask, get_causal_mask
+
+# Modify the HF implementation so 
+# the attention mask provided is actually used
+replace_attention_mask()
 
 class GPT2(pl.LightningModule):
     """
@@ -63,6 +69,7 @@ class GPT2(pl.LightningModule):
         
         # Logging
         # Store the percentage of the non_zero entries in the mask
+        assert len(attn_mask.shape) == 4
         non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
 
@@ -94,13 +101,12 @@ class GPT2(pl.LightningModule):
         targets = targets.cpu().to(torch.int64).to(self.device) # (B, context_length)
 
         # Prepare the attention mask:
-        B, _ = input_ids.shape
-        attn_mask = torch.tril(torch.ones(B, B)).to(input_ids.device).to(torch.bool)
+        B, context_length = input_ids.shape
         if (self.config["pipeline"] == "diffusion" and
-            self.global_step < len(self.annealing_schedule)):  # if we are still in the annealing phase
-            p = self.annealing_schedule[self.global_step]
-            attn_unmask = torch.rand(size=(B, B), device = input_ids.device) <= p
-            attn_mask = attn_mask | attn_unmask
+            self.global_step < len(self.annealing_schedule)):
+            attn_mask = get_annealing_mask(context_length, B, 1.0).to(input_ids.device)
+        else:
+            attn_mask = get_causal_mask(B, context_length)
 
         # Forward pass
         logits, loss = self.forward(input_ids, targets, attn_mask)
@@ -120,11 +126,11 @@ class GPT2(pl.LightningModule):
         targets = targets.cpu().to(torch.int64).to(self.device)
 
         # Can see everything at validation
-        B, _ = input_ids.shape
-        attn_mask = torch.tril(torch.ones(B, B)).to(input_ids.device).to(torch.bool)
+        B, context_length = input_ids.shape
+        attn_mask = get_annealing_mask(context_length, B, 1.0).to(input_ids.device)
         
         # Forward pass
-        logits, loss = self.forward(input_ids, targets, attn_mask)
+        logits, loss = self.forward(input_ids, targets, attn_mask=attn_mask)
         
         # Logging
         self.log("valid/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
