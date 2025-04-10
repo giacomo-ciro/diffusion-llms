@@ -17,12 +17,12 @@ class MemmapTokenDataset(Dataset):
             self,
             memmap_path,
             context_length,
-            is_arm_training: bool = True,
+            is_diffusion_training: bool = False,
         ):
 
         self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
         self.context_length = context_length
-        self.is_arm_training = is_arm_training
+        self.is_diffusion_training = is_diffusion_training
         
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
@@ -44,7 +44,7 @@ class MemmapTokenDataset(Dataset):
         y = self.data[idx+1:idx + self.context_length+1].copy()
         
         # If autoregressive training, return X,y
-        if self.is_arm_training:
+        if not self.is_diffusion_training:
             return torch.from_numpy(X), torch.from_numpy(y)
         
         # Random mask for the output sequence
@@ -84,7 +84,8 @@ class MemmapDataModule(pl.LightningDataModule):
         if os.path.exists(self.memmap_path):
             self.data = MemmapTokenDataset(
             self.memmap_path, 
-            self.context_length
+            self.context_length,
+            is_diffusion_training=self.config["pipeline"] == "diffusion"
         )
         else:
             print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
