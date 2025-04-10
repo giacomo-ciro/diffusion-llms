@@ -64,6 +64,7 @@ class GPT2(pl.LightningModule):
         self,
         input_ids:torch.Tensor,
         targets:torch.Tensor,
+        input_mask:torch.Tensor=None,
         attn_mask:torch.Tensor=None
     ) -> tuple:
         
@@ -82,9 +83,23 @@ class GPT2(pl.LightningModule):
             attn_mask = attn_mask
         ).logits
 
-        if self.config["pipeline"] == "diffusion":
-            # TODO: comupute loss 
-            pass
+        if input_mask is not None:
+            B, seq_len, vocab_size = logits.shape
+
+            # Reshape to (B*seq_len, vocab_size)
+            logits_flat = logits.view(-1, vocab_size)
+            
+            # Reshape  to (B*seq_len)
+            targets_flat = targets.view(-1)
+            mask_flat = input_mask.view(-1)
+            
+            # Select the logits and targets for masked tokens only
+            masked_indices = torch.nonzero(mask_flat, as_tuple=True)[0]
+            masked_logits = logits_flat[masked_indices]
+            masked_targets = targets_flat[masked_indices]
+            
+            # Compute loss
+            loss = torch.nn.functional.cross_entropy(masked_logits, masked_targets)
         else:
             loss = torch.nn.functional.cross_entropy(
                 input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
@@ -96,20 +111,20 @@ class GPT2(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         
         # Read in batch
-        input_ids, targets = batch        
+        input_ids, targets, input_mask = batch        
         input_ids = input_ids.cpu().to(torch.int64).to(self.device) # (B, context_length)
         targets = targets.cpu().to(torch.int64).to(self.device) # (B, context_length)
 
         # Prepare the attention mask:
         B, context_length = input_ids.shape
-        if (self.config["pipeline"] == "diffusion" and
-            self.global_step < len(self.annealing_schedule)):
-            attn_mask = get_annealing_mask(context_length, B, 1.0).to(input_ids.device)
+        if self.config["pipeline"] == "diffusion":
+            p = self.annealing_schedule[self.global_step] if self.global_step < len(self.annealing_schedule) else 1.0
+            attn_mask = get_annealing_mask(context_length, B, p).to(input_ids.device)
         else:
             attn_mask = get_causal_mask(B, context_length)
 
         # Forward pass
-        logits, loss = self.forward(input_ids, targets, attn_mask)
+        logits, loss = self.forward(input_ids, targets, input_mask, attn_mask)
         
         # Logging
         self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
@@ -121,7 +136,7 @@ class GPT2(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         
         # Read in batch
-        input_ids, targets = batch
+        input_ids, targets, input_mask = batch
         input_ids = input_ids.cpu().to(torch.int64).to(self.device)
         targets = targets.cpu().to(torch.int64).to(self.device)
 
@@ -134,7 +149,7 @@ class GPT2(pl.LightningModule):
             attn_mask = get_causal_mask(context_length, B)
         
         # Forward pass
-        logits, loss = self.forward(input_ids, targets, attn_mask=attn_mask)
+        logits, loss = self.forward(input_ids, targets, input_mask, attn_mask)
         
         # Logging
         self.log("valid/loss", loss, on_step=False, on_epoch=True, prog_bar=True)

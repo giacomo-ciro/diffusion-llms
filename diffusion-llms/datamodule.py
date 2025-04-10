@@ -44,18 +44,19 @@ class MemmapTokenDataset(Dataset):
         y = self.data[idx+1:idx + self.context_length+1].copy()
         
         # If autoregressive training, return X,y
-        if not self.is_diffusion_training:
-            return torch.from_numpy(X), torch.from_numpy(y)
-        
-        # Random mask for the output sequence
-        # of shape # (context_length,)
-        t = torch.rand(1).item()
-        mask = torch.rand(
-            size=(y.shape[0],), 
-            dtype=torch.float32
-        ) < t
+        mask = torch.ones((X.shape[0],)).to(torch.bool)
 
-        return X, y, mask
+        # If diffusion, compute the mask
+        if self.is_diffusion_training:
+            # Random mask for the output sequence
+            # of shape # (context_length,)
+            t = torch.rand(1).item()
+            mask = torch.rand(
+                size=(y.shape[0],), 
+                dtype=torch.float32
+            ) < t
+
+        return torch.from_numpy(X), torch.from_numpy(y), mask
         
         
     
