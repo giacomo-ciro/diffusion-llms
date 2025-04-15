@@ -1,6 +1,20 @@
 # diffusion-llms
 Making LLMs inference faster with diffusion.
 
+## Roadmap
+- [ ] choose as baseline DiffuGPT naive approach: choose token wrt EoS pad token (pass prompt with mask and pad)
+- [ ] check how DiffuGPT tackles dynamic length inference (there is no pad token: we need to check if there is an EoS token)
+- [ ] check what training data DiffuGPT uses 
+
+#### Feedback
+- ambition is good, doability is the question
+- concretize the chance of success - a series of questions that can be answered quickly at the beginning
+- control how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
+- be very explicit about research question, don’t fear to be overly specific, also be open about the limitations
+- change formulations to see if changing head affects anything: robustness checks
+- find sources that do not affect variance
+- walk the reader through the paper
+
 ## TODOs
 - [x] ~~Setup WandB project and logging~~
 - [x] ~~Update README with wandB instructions~~
