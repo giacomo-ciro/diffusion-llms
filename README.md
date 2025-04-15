@@ -13,7 +13,7 @@ Making LLMs inference faster with diffusion.
 
 ## Overview
 ### Research Question
-We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
+(tl;dr) We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
 
 ### Notes
 When running on hpc, gpt2 small with batch_size = 8 is the largest it can be (using both 1080 gpus...)
