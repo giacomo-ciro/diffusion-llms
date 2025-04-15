@@ -2,11 +2,19 @@
 Making LLMs inference faster with diffusion.
 
 ## Roadmap
-- [ ] choose as baseline DiffuGPT naive approach: choose token wrt EoS pad token (pass prompt with mask and pad)
-- [ ] check how DiffuGPT tackles dynamic length inference (there is no pad token: we need to check if there is an EoS token)
+- [ ] train GPT2 without and with diffusion (+mask, +pad (`max_length(oww)-token)`)
 - [ ] check what training data DiffuGPT uses 
+- [ ] should we train one-shot or add pad token to the training data?
+- [ ] choose as baseline DiffuGPT naive approach: choose token wrt EoS pad token (pass prompt with mask and pad)
+- [ ] instruction tuning
+- [ ] can we adapt a diffusion adapted model to variable length generation? 
+- [ ] check how DiffuGPT tackles dynamic length inference (there is no pad token we need to check if there is an EoS token)
+- [ ] confirm if in LLaDa they mask with a proportion t ~ U(0,1)
 
-#### Feedback
+### Extra
+- [ ] explore how many tokens you can infer on parallel - if there is a gain on inference time wrt to diffusion w/o padding and wrt to ARM
+
+### Feedback
 - ambition is good, doability is the question
 - concretize the chance of success - a series of questions that can be answered quickly at the beginning
 - control how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
