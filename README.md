@@ -1,6 +1,15 @@
 # diffusion-llms
 Making LLMs inference faster with diffusion.
 
+# Proposed Research
+DiffuGPT managed to adapt GPT-2, effectively converting a Autoregressive Language Model (ARM) to a Diffusion Language Model (DLM). However, they did not address the output length, making DiffuGPT only capable of generating output with fixed length. In this project, we aim to further train DiffuGPT, making it capable of variable length generation.
+
+First, we an approach similar to the one proposed in the Llada paper (training with custom dataset of answer + prompt + eos + pad tokens).
+
+Then, we test how confident our model is in predicting the eos token at the first step of the diffusino generation (to avoid computing all the pad token and save computations).
+
+Finally, we propose methods to improve the model capacity of predciting the eos token (e.g., by fine-tuning on propmt + msk + eos + msk) and evaluate the first-step eos prediction ability.
+
 ## Roadmap
 - [ ] train GPT2 without and with diffusion (+mask, +pad (`max_length(oww)-token)`)
 - [ ] check what training data DiffuGPT uses 
