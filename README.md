@@ -1,6 +1,20 @@
 # diffusion-llms
 Making LLMs inference faster with diffusion.
 
+## Roadmap
+- [ ] choose as baseline DiffuGPT naive approach: choose token wrt EoS pad token (pass prompt with mask and pad)
+- [ ] check how DiffuGPT tackles dynamic length inference (there is no pad token: we need to check if there is an EoS token)
+- [ ] check what training data DiffuGPT uses 
+
+#### Feedback
+- ambition is good, doability is the question
+- concretize the chance of success - a series of questions that can be answered quickly at the beginning
+- control how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
+- be very explicit about research question, don’t fear to be overly specific, also be open about the limitations
+- change formulations to see if changing head affects anything: robustness checks
+- find sources that do not affect variance
+- walk the reader through the paper
+
 ## TODOs
 - [x] ~~Setup WandB project and logging~~
 - [x] ~~Update README with wandB instructions~~
@@ -8,13 +22,23 @@ Making LLMs inference faster with diffusion.
 - [ ] Adapt gpt2 for diffusion, obtain DiffuGPT_ours
 - [ ] Implement dynamic length inference (at first step, look for the token with highest < pad > probability and return it to set an upper bound, then proceed with diffusion sampling as in the other papers)
 - [ ] Test dynamic length inference on DiffuGPT, DiffuLAMA, DiffuGPT_ours, LlaDa
-- [ ] Setup checkpointing (save weights and init from local weights)
+- [ ] Setup init from local weights
 - [ ] Update README with instructions for running on HPC
+- [x] ~~Implement attention mask annealing~~
+- [x] ~~Adapt datamodule to diffusion pipeline~~
+- [ ] Check the implementation of discrete diffusion training works as expected
 
 ## Overview
 ### Research Question
 (tl;dr) We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
 
+### Discrete Diffusion Framework
+Training step for diffusion model:  
+    1. Input sequence $X\in\mathbb{R}^n$ of integers  
+    2. Sample $t \sim U(0,1)$  
+    3. Mask each token in the input sequence with probability $t$  
+    4. Pass to the model to get logits for all  
+    5. Measure cross entropy loss only on masked tokens  
 ### Notes
 When running on hpc, gpt2 small with batch_size = 8 is the largest it can be (using both 1080 gpus...)
 

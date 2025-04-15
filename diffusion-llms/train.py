@@ -31,7 +31,6 @@ if config["wandb"]:
         config=config,
         name=config["run_name"] if config["run_name"] else None,
     )
-    wandb.define_metric("valid/ce", summary="min", step_metric="step")
     logger = WandbLogger(project=config["project_name"])
 else:
     logger = CSVLogger(save_dir=".")
@@ -43,23 +42,24 @@ datamodule = MemmapDataModule(CONFIG_PATH)
 model = GPT2(CONFIG_PATH)
 
 # Checkpointers
-dirpath = config["save_dir"] + time.strftime("ymd_%y%m%d_HMS_%H_%M_%S")
-checkpointer = ModelCheckpoint(
-    dirpath=dirpath,  # Directory to save checkpoints
-    filename='epoch_{epoch}_ce_{valid/ce:.2f}',            # Checkpoint filename format
-    save_top_k=-1,                                                          # Save the 3 best models
-    monitor='valid/ce',                                                     # Metric to monitor
-    mode='min',                                                             # Mode ('min' for loss, 'max' for accuracy)
-    auto_insert_metric_name=False,
-)
-# Save model config
-os.mkdir(dirpath)
-with open(os.path.join(dirpath, "config.json"), "w") as f:
-    json.dump(config, f, indent = 2)
+if config["enable_checkpointing"]:
+    dirpath = config["save_dir"] + time.strftime("ymd_%y%m%d_HMS_%H_%M_%S")
+    checkpointer = ModelCheckpoint(
+        dirpath=dirpath,  # Directory to save checkpoints
+        filename='epoch_{epoch}_ce_{valid/loss:.2f}',            # Checkpoint filename format
+        save_top_k=-1,                                                          # Save the 3 best models
+        monitor='valid/loss',                                                     # Metric to monitor
+        mode='min',                                                             # Mode ('min' for loss, 'max' for accuracy)
+        auto_insert_metric_name=False,
+    )
+    # Save model config
+    os.mkdir(dirpath)
+    with open(os.path.join(dirpath, "config.json"), "w") as f:
+        json.dump(config, f, indent = 2)
 
 # Early Stopping
 early_stopping = EarlyStopping(
-    monitor='valid/ce',             # Monitor validation cross-entropy loss
+    monitor='valid/loss',             # Monitor validation cross-entropy loss
     patience=2,                     # Number of validation checks with no improvement after which training will stop
     min_delta=0.001,                # Minimum change in monitored value to qualify as improvement
     mode='min',                     # We want to minimize the loss
@@ -78,7 +78,7 @@ trainer = pl.Trainer(
     log_every_n_steps=1,
     val_check_interval=config["val_check_interval"],     # after how many train batches to check val
     # enable_checkpointing=False,                 # if true, saves the most recent model after each epoch TODO: personalize checkpointing
-    callbacks=[checkpointer, early_stopping],
+    callbacks=[checkpointer, early_stopping] if config["enable_checkpointing"] else [early_stopping],
     enable_progress_bar=True,
     # gradient_clip_val=config["grad_clip"],      # Maximum norm of the gradients
     # gradient_clip_algorithm='norm',             # 'norm' or 'value'
