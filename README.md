@@ -38,7 +38,7 @@ Making LLMs inference faster with diffusion.
 
 ## Overview
 ### Research Question
-We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
+(tl;dr) We explored previous research trying to overcome the issue with fixed-length outputs in diffusion models compromising between diffusion and auto-regression. We propose a variable length diffusion generation that is fully diffusion.
 
 ### Discrete Diffusion Framework
 Training step for diffusion model:  
