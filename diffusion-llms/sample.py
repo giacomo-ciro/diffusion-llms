@@ -26,7 +26,12 @@ model = GPT2(CONFIG_PATH)
 
 # Generate
 for _ in range(config["n_samples"]):
-    ans = model.generate(prompt_idx, max_new_tokens=128)
+    ans = model.generate(
+        prompt_idx, 
+        max_new_tokens=config.get("max_new_tokens", 128),
+        temperature=config.get("temperature", 1.0),
+        top_k=config.get("top_k", None)
+    )
     ans = decode(ans[0].tolist())
     print(ans)
-    print("-"*89)
+    print("-"*89) # mirko alessandrini reference?
