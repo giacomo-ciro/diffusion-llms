@@ -61,7 +61,7 @@ Please, duplicate `config.json`, rename to `local_config.json` (added to `.gitig
 
 ### WandB login
 To use wandb, you must login (locally or on hpc). From the CLI, run the following (and follow the prompts):
-```
+```bash 
 $ python
 >>> import wandb
 >>> wandb.login()
@@ -69,16 +69,16 @@ $ python
 
 ### Train a model
 Specify in the `config.json` file the parameters of the training. The key `init_from` is used to specify the starting point. If one of `['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl']`, then it downloads the weights from huggingface and instantiate a pre-trained model. Any other value backs off to init from scratch. Then start the training:
-```
-cd diffusion-llms
-python train.py path/to/config.json
+```bash
+$ cd diffusion-llms
+$ python train.py path/to/config.json
 ```
 
 ### Sample from model
 In the `config.json` file using the GPT-2 implementation from [Andrej Karpathy](https://github.com/karpathy/nanoGPT).
 
 Download the weights of gpt-2 from huggingface, instantiate a `GPT()` model class from `model.py`, load `configurator.py` and sample from the model. Specifying the prompt and the number of answers to generate.
-``` 
+``` bash 
 $ cd diffusion-llms
 $ python sample.py path/to/config
 ```
@@ -123,16 +123,16 @@ The configuration file should specify:
 To ensure dependencies are cleanly managed and consistent, create and activate a conda environment:
 
 ```bash
-conda deactivate # if another environment is currently active
-conda create --name dl-nlp python=3.12
-conda activate dl-nlp
+$ conda deactivate # if another environment is currently active
+$ conda create --name dl-nlp python=3.12 -y
+$ conda activate dl-nlp
 ```
 
 ## Requirements
 Install the necessary packages using `pip`:
 
 ```bash
-python -m pip install -r requirements.txt
+$ python -m pip install -r requirements.txt
 ```
 
 > Using `python -m pip` ensures that packages are installed in the environment linked to your current Python interpreter, avoiding issues with multiple Python installations.
