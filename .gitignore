@@ -3,4 +3,6 @@
 */__pycache__/
 */wandb/
 */local_config.json
+*/local_config_2.json
+*/min_config.json
 *.ckpt

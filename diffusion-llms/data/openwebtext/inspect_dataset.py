@@ -2,7 +2,7 @@ import numpy as np
 import tiktoken
 
 # Load the memmap file
-data = np.memmap('./var_len_26K.bin', dtype=np.uint16, mode='r')
+data = np.memmap('./var_len_fixed_614K.bin', dtype=np.uint16, mode='r')
 
 # Initialize tokenizer
 enc = tiktoken.get_encoding("gpt2")
