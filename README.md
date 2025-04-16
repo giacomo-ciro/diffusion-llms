@@ -4,11 +4,11 @@ Making LLMs inference faster with diffusion.
 # Proposed Research
 DiffuGPT managed to adapt GPT-2, effectively converting a Autoregressive Language Model (ARM) to a Diffusion Language Model (DLM). However, they did not address the output length, making DiffuGPT only capable of generating output with fixed length. In this project, we aim to further train DiffuGPT, making it capable of variable length generation.
 
-First, we an approach similar to the one proposed in the Llada paper (training with custom dataset of answer + prompt + eos + pad tokens).
+First, we an approach similar to the one proposed in the Llada paper (training with custom dataset of answer + prompt + EoS + pad tokens).
 
-Then, we test how confident our model is in predicting the eos token at the first step of the diffusino generation (to avoid computing all the pad token and save computations).
+Then, we test how confident our model is in predicting the EoS token at the first step of the diffusion generation (to avoid computing all the pad token and save computations).
 
-Finally, we propose methods to improve the model capacity of predciting the eos token (e.g., by fine-tuning on propmt + msk + eos + msk) and evaluate the first-step eos prediction ability.
+Finally, we propose methods to improve the model capacity of predicting the EoS token (e.g., by fine-tuning on prompt + msk + EoS + msk) and evaluate the first-step EoS prediction ability.
 
 ## Roadmap
 - [ ] train GPT2 without and with diffusion (+mask, +pad (`max_length(oww)-token)`)
@@ -23,14 +23,14 @@ Finally, we propose methods to improve the model capacity of predciting the eos 
 ### Extra
 - [ ] explore how many tokens you can infer on parallel - if there is a gain on inference time wrt to diffusion w/o padding and wrt to ARM
 
-### Feedback
+### Feedback from Professor
 - ambition is good, doability is the question
 - concretize the chance of success - a series of questions that can be answered quickly at the beginning
 - control how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
 - be very explicit about research question, don’t fear to be overly specific, also be open about the limitations
 - change formulations to see if changing head affects anything: robustness checks
 - find sources that do not affect variance
-- walk the reader through the paper
+- walk the reader through the resulting paper
 
 ## TODOs
 - [x] ~~Setup WandB project and logging~~
@@ -144,6 +144,7 @@ The configuration file should specify:
 │       ├── train_1M.bin
 │       ├── train_1M.txt
 │       └── etc.
+│   ├── attention_patch.py
 │   ├── config.json         # Default configuration file
 │   ├── configurator.py     # Configuration utilities
 │   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
