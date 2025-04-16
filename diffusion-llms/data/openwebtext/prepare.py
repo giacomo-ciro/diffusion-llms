@@ -68,7 +68,8 @@ arr = np.memmap(
 )
 
 idx = 0
-for sample in tqdm(tokenized, desc="Writing to .bin"):
+desc = "Writing to .bin (ETA not available because we are working with IterableDataset)"
+for sample in tqdm(tokenized, desc=desc):
 
     # Write into mmap
     sample_len = sample["len"]
