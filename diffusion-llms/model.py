@@ -251,8 +251,8 @@ class GPT2(pl.LightningModule):
         x[:, :prompt_len] = idx
         
         # Number of diffusion steps
-        num_steps = max(64, max_new_tokens // 4)  # Adjust this based on your needs
-        
+        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
+               
         # Simple diffusion process - gradually unmask tokens
         for step in range(num_steps, 0, -1):
             # Calculate current noise level
