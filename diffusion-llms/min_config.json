@@ -1,11 +1,11 @@
 {
-  "pipeline": "arm",
+  "pipeline": "diffusion",
   "attn_annealing_steps": 1000,
   "mask_id": 10541,
   
   "init_from":"",
   "resume_training":false,
-  "memmap_path": "./data/openwebtext/var_len_51K.bin",
+  "memmap_path": "./data/openwebtext/var_len_26K.bin",
   "context_length": 256,
   "n_embd": 128,
   "n_layer": 8,
