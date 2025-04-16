@@ -27,6 +27,11 @@ class MemmapTokenDataset(Dataset):
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
         self.effective_length = max(0, (len(self.data) - (context_length + 1)) + 1)
+
+        # Setup for variable length generation and custom training
+        self.variable_length = variable_length
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         
     def __len__(self):
         return self.effective_length
@@ -55,6 +60,21 @@ class MemmapTokenDataset(Dataset):
                 size=(y.shape[0],), 
                 dtype=torch.float32
             ) < t
+
+        if self.variable_length:
+            # Find first EOS token in the sequence (if any)
+            eos_indices = (y == self.eos_token_id).nonzero(as_tuple=True)[0]
+            if len(eos_indices) > 0:
+                # Everything after the first EOS should be padded in loss calculation
+                eos_idx = eos_indices[0].item()
+                # Create special mask that only considers tokens up to EOS
+                content_mask = torch.zeros_like(mask, dtype=torch.bool)
+                content_mask[:eos_idx+1] = True
+                # Combine with the diffusion mask
+                if self.is_diffusion_training:
+                    mask = mask & content_mask
+                else:
+                    mask = content_mask
 
         return torch.from_numpy(X), torch.from_numpy(y), mask
         
