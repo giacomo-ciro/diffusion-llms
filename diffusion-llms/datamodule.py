@@ -18,6 +18,9 @@ class MemmapTokenDataset(Dataset):
             memmap_path,
             context_length,
             is_diffusion_training: bool = False,
+            variable_length: bool = False,  
+            eos_token_id: int = None,      
+            pad_token_id: int = None,     
         ):
 
         self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
@@ -27,8 +30,8 @@ class MemmapTokenDataset(Dataset):
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
         self.effective_length = max(0, (len(self.data) - (context_length + 1)) + 1)
-
-        # Setup for variable length generation and custom training
+        
+        # Setup for variable length generation
         self.variable_length = variable_length
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -61,9 +64,13 @@ class MemmapTokenDataset(Dataset):
                 dtype=torch.float32
             ) < t
 
-        if self.variable_length:
+        # Variable length handling - need to convert numpy array to tensor first
+        if self.variable_length and self.eos_token_id is not None:
+            # Convert numpy array to torch tensor for eos detection
+            y_tensor = torch.from_numpy(y)
+            
             # Find first EOS token in the sequence (if any)
-            eos_indices = (y == self.eos_token_id).nonzero(as_tuple=True)[0]
+            eos_indices = (y_tensor == self.eos_token_id).nonzero(as_tuple=True)[0]
             if len(eos_indices) > 0:
                 # Everything after the first EOS should be padded in loss calculation
                 eos_idx = eos_indices[0].item()
@@ -104,10 +111,13 @@ class MemmapDataModule(pl.LightningDataModule):
         
         if os.path.exists(self.memmap_path):
             self.data = MemmapTokenDataset(
-            self.memmap_path, 
-            self.context_length,
-            is_diffusion_training=self.config["pipeline"] == "diffusion"
-        )
+                self.memmap_path, 
+                self.context_length,
+                is_diffusion_training=self.config["pipeline"] == "diffusion",
+                variable_length=self.config.get("variable_length", False),
+                eos_token_id=self.config.get("eos_token_id", None),
+                pad_token_id=self.config.get("pad_token_id", None)
+            )
         else:
             print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
             exit()

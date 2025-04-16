@@ -297,3 +297,61 @@ class GPT2(pl.LightningModule):
                 x = torch.where(random_mask, torch.full_like(x, self.config["mask_id"]), x)
         
         return x
+
+    def test_eos_prediction(self, prompt_tokens, eos_token_id, pad_token_id, num_samples=100):
+        """
+        Test how well the model predicts EOS tokens at the first diffusion step.
+        
+        Args:
+            prompt_tokens: Token IDs of the prompt
+            eos_token_id: ID of the EOS token
+            pad_token_id: ID of the padding token
+            num_samples: Number of samples to test
+            
+        Returns:
+            Dictionary with metrics about EOS prediction accuracy
+        """
+        eos_predictions = []
+        eos_confidences = []
+        
+        for _ in range(num_samples):
+            # Create a sequence with prompt + all masks
+            B = 1  # Batch size of 1 for evaluation
+            seq_len = self.config["context_length"]
+            prompt_len = len(prompt_tokens)
+            
+            # Create input sequence with prompt followed by masks
+            input_ids = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=self.device)
+            input_ids[0, :prompt_len] = torch.tensor(prompt_tokens, dtype=torch.long, device=self.device)
+            
+            # Create mask for prediction (only predict masked positions)
+            mask = torch.zeros((B, seq_len), dtype=torch.bool, device=self.device)
+            mask[0, prompt_len:] = True
+            
+            # Make prediction
+            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(self.device)  # Full attention for testing
+            logits, _ = self.forward(input_ids, input_ids, mask, attn_mask)
+            
+            # Get prediction probabilities for masked positions
+            probs = torch.softmax(logits[0, prompt_len:], dim=-1)
+            
+            # Get probability of EOS token at each position
+            eos_probs = probs[:, eos_token_id].cpu().numpy()
+            
+            # Check if EOS has highest probability at any position
+            predicted_tokens = torch.argmax(logits[0, prompt_len:], dim=-1).cpu().numpy()
+            has_eos = eos_token_id in predicted_tokens
+            eos_pos = np.argmax(eos_probs) if has_eos else -1
+            
+            eos_predictions.append(has_eos)
+            eos_confidences.append(np.max(eos_probs))
+        
+        # Calculate metrics
+        eos_prediction_rate = sum(eos_predictions) / num_samples
+        avg_confidence = sum(eos_confidences) / num_samples
+        
+        return {
+            "eos_prediction_rate": eos_prediction_rate,
+            "avg_eos_confidence": avg_confidence,
+            "eos_confidences": eos_confidences
+        }
