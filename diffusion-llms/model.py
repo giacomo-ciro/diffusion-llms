@@ -227,4 +227,73 @@ class GPT2(pl.LightningModule):
     
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
-        pass
+        """
+        Generate text using diffusion process.
+        
+        Args:
+            idx: Starting token sequence (list or tensor)
+            max_new_tokens: Maximum number of new tokens to generate
+            temperature: Sampling temperature
+            top_k: Top-k sampling parameter
+        """
+        # Convert input to tensor if it's a list
+        if isinstance(idx, list):
+            idx = torch.tensor(idx, dtype=torch.long).unsqueeze(0).to(self.device)
+        elif isinstance(idx, torch.Tensor) and idx.dim() == 1:
+            idx = idx.unsqueeze(0).to(self.device)
+        
+        B = idx.shape[0]  # Batch size
+        prompt_len = idx.shape[1]
+        
+        # Start with fully masked sequence for the new tokens
+        seq_len = prompt_len + max_new_tokens
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=self.device)
+        x[:, :prompt_len] = idx
+        
+        # Number of diffusion steps
+        num_steps = max(64, max_new_tokens // 4)  # Adjust this based on your needs
+        
+        # Simple diffusion process - gradually unmask tokens
+        for step in range(num_steps, 0, -1):
+            # Calculate current noise level
+            t = step / num_steps
+            
+            # Create mask for the positions we want to predict (those that are masked)
+            mask = (x == self.config["mask_id"])
+            
+            # Get attention mask - full attention for inference
+            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+            
+            # Forward pass to get predictions
+            with torch.no_grad():
+                logits, _ = self.forward(x, x, mask, attn_mask)
+            
+            # Apply temperature and optional top-k sampling
+            logits = logits / temperature
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, :, [-1]]] = -float('Inf')
+            
+            # Convert to probabilities
+            probs = torch.softmax(logits, dim=-1)
+            
+            # Sample from the distribution
+            next_tokens = torch.multinomial(
+                probs.view(-1, probs.size(-1)), 
+                num_samples=1
+            ).view(B, seq_len)
+            
+            # Update the tokens that were masked
+            x = torch.where(mask, next_tokens, x)
+            
+            # For the next step, randomly mask some proportion of tokens
+            # based on the current diffusion step
+            if step > 1:  # Don't mask in the final step
+                mask_ratio = (step - 1) / num_steps
+                random_mask = torch.rand(B, seq_len, device=x.device) < mask_ratio
+                # Only mask the new generated tokens, not the prompt
+                random_mask[:, :prompt_len] = False
+                # Apply random masking
+                x = torch.where(random_mask, torch.full_like(x, self.config["mask_id"]), x)
+        
+        return x
