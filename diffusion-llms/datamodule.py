@@ -84,8 +84,7 @@ class MemmapTokenDataset(Dataset):
                     mask = content_mask
 
         return torch.from_numpy(X), torch.from_numpy(y), mask
-        
-        
+    
     
 class MemmapDataModule(pl.LightningDataModule):
     """
