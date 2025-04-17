@@ -25,6 +25,13 @@ dataset = load_dataset(
     streaming=True,
 ).take(SAMPLE_SIZE)
 
+# more than 15T tokens of cleaned and deduplicated english web data from CommonCrawl
+# dataset = load_dataset(
+#     "HuggingFaceFW/fineweb",    
+#     "CC-MAIN-2013-20",  
+#     split = "train",
+#     streaming=True,
+# ).take(SAMPLE_SIZE)
 
 # we now want to tokenize the dataset. first define the encoding function (gpt2 bpe)
 enc = tiktoken.get_encoding("gpt2")
