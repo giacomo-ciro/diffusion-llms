@@ -1,4 +1,5 @@
 import json
+import math
 
 import numpy as np
 import torch
@@ -83,28 +84,31 @@ class GPT2(pl.LightningModule):
             attn_mask = attn_mask
         ).logits
 
-        if input_mask is not None:
-            B, seq_len, vocab_size = logits.shape
+        if targets:
+            if input_mask is not None:
+                B, seq_len, vocab_size = logits.shape
 
-            # Reshape to (B*seq_len, vocab_size)
-            logits_flat = logits.view(-1, vocab_size)
-            
-            # Reshape  to (B*seq_len)
-            targets_flat = targets.view(-1)
-            mask_flat = input_mask.view(-1)
-            
-            # Select the logits and targets for masked tokens only
-            masked_indices = torch.nonzero(mask_flat, as_tuple=True)[0]
-            masked_logits = logits_flat[masked_indices]
-            masked_targets = targets_flat[masked_indices]
-            
-            # Compute loss
-            loss = torch.nn.functional.cross_entropy(masked_logits, masked_targets)
+                # Reshape to (B*seq_len, vocab_size)
+                logits_flat = logits.view(-1, vocab_size)
+                
+                # Reshape  to (B*seq_len)
+                targets_flat = targets.view(-1)
+                mask_flat = input_mask.view(-1)
+                
+                # Select the logits and targets for masked tokens only
+                masked_indices = torch.nonzero(mask_flat, as_tuple=True)[0]
+                masked_logits = logits_flat[masked_indices]
+                masked_targets = targets_flat[masked_indices]
+                
+                # Compute loss
+                loss = torch.nn.functional.cross_entropy(masked_logits, masked_targets)
+            else:
+                loss = torch.nn.functional.cross_entropy(
+                    input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
+                    target = targets.reshape(-1),   # (B, context_length) -> (B*context_length,)
+                )
         else:
-            loss = torch.nn.functional.cross_entropy(
-                input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
-                target = targets.reshape(-1),   # (B, context_length) -> (B*context_length,)
-            )
+            loss = None
 
         return logits, loss
 
@@ -226,76 +230,123 @@ class GPT2(pl.LightningModule):
         }
     
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
+    def generate(self, input_ids, max_new_tokens, temperature=1.0, top_k=None):
         """
         Generate text using diffusion process.
         
         Args:
-            idx: Starting token sequence (list or tensor)
+            input_ids: Starting token sequence (list or tensor)
             max_new_tokens: Maximum number of new tokens to generate
             temperature: Sampling temperature
             top_k: Top-k sampling parameter
         """
-        # Convert input to tensor if it's a list
-        if isinstance(idx, list):
-            idx = torch.tensor(idx, dtype=torch.long).unsqueeze(0).to(self.device)
-        elif isinstance(idx, torch.Tensor) and idx.dim() == 1:
-            idx = idx.unsqueeze(0).to(self.device)
+
+        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
+        assert temperature > 0
         
-        B = idx.shape[0]  # Batch size
-        prompt_len = idx.shape[1]
+        self.eval()
+        input_ids = input_ids.to(self.device)
+
+        # Get dimensions
+        B = input_ids.shape[0]
+        prompt_len = input_ids.shape[1]
         
         # Start with fully masked sequence for the new tokens
         seq_len = prompt_len + max_new_tokens
         x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=self.device)
-        x[:, :prompt_len] = idx
+        
+        # (id, ..., id, msk, ..., msk)
+        # [B, seq_len]
+        x[:, :prompt_len] = input_ids
         
         # Number of diffusion steps
         num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
-               
-        # Simple diffusion process - gradually unmask tokens
+        
+        # Number of tokens to be denoised at each step
+        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        
+        # Full attention mask for inference
+        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        
+        # Gradually unmask tokens
         for step in range(num_steps, 0, -1):
-            # Calculate current noise level
-            t = step / num_steps
             
-            # Create mask for the positions we want to predict (those that are masked)
+            # Get masked positions
             mask = (x == self.config["mask_id"])
             
-            # Get attention mask - full attention for inference
-            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+            # Exit when generation is completed
+            if not any(mask):
+                break
             
             # Forward pass to get predictions
             with torch.no_grad():
-                logits, _ = self.forward(x, x, mask, attn_mask)
+                logits, _ = self.forward(
+                    input_ids=x,
+                    targets=None,
+                    input_mask=None,
+                    attn_mask=attn_mask
+                )
             
             # Apply temperature and optional top-k sampling
             logits = logits / temperature
             if top_k is not None:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                v, _ = torch.topk(
+                    input = logits,
+                    k = min(top_k, logits.size(-1)),
+                    dim=-1
+                )
                 logits[logits < v[:, :, [-1]]] = -float('Inf')
             
             # Convert to probabilities
             probs = torch.softmax(logits, dim=-1)
-            
+
             # Sample from the distribution
             next_tokens = torch.multinomial(
                 probs.view(-1, probs.size(-1)), 
                 num_samples=1
             ).view(B, seq_len)
             
+            # Right shift
+            # [0, 1, 2, 3] -> [0, 0, 1, 2]
+            next_tokens = torch.cat(
+                [next_tokens[:,0:1], next_tokens[:, :-1]],
+                 dim=1
+            )
+
+            # Compute entropy for each position (along the vocabulary)
+            entropy = -torch.sum(
+                probs * torch.log2(probs),
+                axis = -1
+            )
+
+            # Deal with right shift in the entropy computation
+            # probs at position i refer to (i+1)-th token in the output
+            entropy = torch.cat(
+                [entropy[:, 0:1], entropy[:, :-1]],
+                 dim=1
+            )
+            # Set tokens not to be predicted at +inf
+            entropy[~mask] = torch.inf
+
+            # Get the most confident predictions
+            # (lowest entropy, lowest perplexity)
+            idx_to_denoise = torch.topk(
+                entropy,
+                k=n_tokens_per_step,
+                dim=-1,
+                largest=False
+            )
+
+            # Transform indices to mask
+            step_mask = torch.zeros_like(mask)
+            step_mask.scatter_(1, idx_to_denoise, True)
+            
+            # Only predict those
+            mask = mask & step_mask
+            
             # Update the tokens that were masked
             x = torch.where(mask, next_tokens, x)
             
-            # For the next step, randomly mask some proportion of tokens
-            # based on the current diffusion step
-            if step > 1:  # Don't mask in the final step
-                mask_ratio = (step - 1) / num_steps
-                random_mask = torch.rand(B, seq_len, device=x.device) < mask_ratio
-                # Only mask the new generated tokens, not the prompt
-                random_mask[:, :prompt_len] = False
-                # Apply random masking
-                x = torch.where(random_mask, torch.full_like(x, self.config["mask_id"]), x)
-        
         return x
 
     def test_eos_prediction(self, prompt_tokens, eos_token_id, pad_token_id, num_samples=100):
