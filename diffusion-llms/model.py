@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import lightning as pl
 from torch.optim.lr_scheduler import OneCycleLR
-from transformers import GPT2LMHeadModel, GPT2Config
+from transformers import GPT2LMHeadModel, GPT2Config, GenerationConfig
 from attention_patch import replace_attention_mask
 from utils import get_annealing_mask, get_causal_mask
 
@@ -30,25 +30,16 @@ class GPT2(pl.LightningModule):
             self.config = json.load(f)
 
         # Init the model
-        # Pre-trained from hugging face
         init_from = self.config["init_from"]
         if init_from.startswith("gpt2"):
-            assert init_from in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
             print(f"Loading pre-trained {init_from}...")
-            self.gpt2 = GPT2LMHeadModel.from_pretrained(
-                pretrained_model_name_or_path = init_from
-            )
-        
-        # A new version from scratch
+            self.init_gpt2(pretrained=init_from)
+        elif init_from == "diffugpt":
+            print("Loading pre-trained DiffuGPT...")
+            self.init_diffugpt()
         else:
-            print("Initializing new GPT-2...")
-            gptconfig = GPT2Config(
-                n_positions=self.config["context_length"],
-                n_embd=self.config["n_embd"],
-                n_layer=self.config["n_layer"],
-                n_head=self.config["n_head"],
-            )
-            self.gpt2 = GPT2LMHeadModel(gptconfig)
+            print("Initializing new gpt2...")
+            self.init_gpt2(pretrained=False)
         
         # For the annealing 
         # At each step i, the entries in the attention mask 
@@ -60,7 +51,75 @@ class GPT2(pl.LightningModule):
                 1,
                 self.config["attn_annealing_steps"]
             )
+    
+
+    def init_diffugpt(self):
+        """
+        Load the pre-trained DiffuGPT:
+            1. Init a new gpt2 from scratch
+            2. Download DiffuGPT weights from HF
+            3. Rename accordingly
+            4. Load the weights and check match (wte & lm_head are tied)
+        """
+        from huggingface_hub import hf_hub_download
+        from safetensors.torch import load_file
         
+        # Initialize a new gpt2 model
+        self.init_gpt2(pretrained=False)
+
+        # Checks
+        wte_before = self.gpt2.lm_head.weight.clone()
+        lm_head_before = self.gpt2.transformer.wte.weight.clone()
+        assert torch.all(wte_before == lm_head_before)
+
+        # Download the weights
+        path_to_safetensor = hf_hub_download(
+            repo_id="diffusionfamily/diffugpt-s",
+            filename="model.safetensors"
+        )        
+        model_weights = load_file(path_to_safetensor)
+        
+        # Adjust names
+        state_dict = {k.replace("denoise_model", "transformer"):v for k,v in model_weights.items()}
+        state_dict["transformer.wte.weight"] = state_dict["embed_tokens.weight"].clone()
+        
+        # LM Head and WTE are tied
+        state_dict["lm_head.weight"] = state_dict["embed_tokens.weight"].clone()
+        del state_dict["embed_tokens.weight"]
+        
+        # Load weights
+        incompatible_keys = self.gpt2.load_state_dict(state_dict, strict=False)
+        print(incompatible_keys)
+
+        # Checks
+        wte_after = self.gpt2.lm_head.weight.clone()
+        lm_head_after = self.gpt2.transformer.wte.weight.clone()
+        assert not torch.all(wte_before == wte_after)
+        assert not torch.all(lm_head_before == lm_head_after)
+        assert torch.all(wte_after == lm_head_after)
+
+    def init_gpt2(
+            self,
+            pretrained: str=None,
+        ):
+        """
+        Init a gpt2 model from scratch or from HF checkpoint.
+        """
+
+        if pretrained:
+            assert pretrained in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
+            self.gpt2 = GPT2LMHeadModel.from_pretrained(
+                pretrained_model_name_or_path = pretrained
+            )
+        else:
+            gptconfig = GPT2Config(
+                n_positions=self.config["context_length"],
+                n_embd=self.config["n_embd"],
+                n_layer=self.config["n_layer"],
+                n_head=self.config["n_head"],
+            )
+            self.gpt2 = GPT2LMHeadModel(gptconfig)
+
     def forward(
         self,
         input_ids:torch.Tensor,
@@ -229,21 +288,68 @@ class GPT2(pl.LightningModule):
             },
         }
     
+    
     @torch.no_grad()
-    def generate(self, input_ids, max_new_tokens, temperature=1.0, top_k=None):
+    def generate(
+        self,
+        input_ids: torch.Tensor,
+        max_new_tokens: int,
+        temperature:int=1.0,
+        top_k:float=None
+    )->list[torch.Tensor]:
+        """
+        Samples from the model according to the specified pipeline. 
+        Always returns a list of tensors.
+        When pipeline is diffusion, this list has length equal to the
+        number of diffusion steps, and each element is an intermediate 
+        stage of the diffusion process.
+        When pipeline is arm, the list has length 1.
+        """
+        if self.config["pipeline"] == "arm":
+            genconfig = GenerationConfig(
+                max_new_tokens = max_new_tokens,
+                temperature=temperature,
+                top_k=top_k
+            )
+            out = self.gpt2.generate(
+                inputs=input_ids,
+                generation_config=genconfig,
+
+            )
+            return [out]
+        
+        elif self.config["pipeline"] == "diffusion":
+            xs = self.generate_diffusion(
+                input_ids,
+                max_new_tokens,
+                temperature,
+                top_k
+            )
+            return xs
+        
+        else:
+            print("[!] Pipeline not implemented, check config file.")
+            exit()
+        
+    def generate_diffusion(
+        self,
+        input_ids,
+        max_new_tokens,
+        temperature,
+        top_k
+    ):
         """
         Generate text using diffusion process.
-        
-        Args:
-            input_ids: Starting token sequence (list or tensor)
-            max_new_tokens: Maximum number of new tokens to generate
-            temperature: Sampling temperature
-            top_k: Top-k sampling parameter
+        The total number T of diffusion steps is given.
+        At each step, un-mask  1/T % of tokens. 
+        The tokens to be un-masked are the ones with highest confidence (lowest entropy).
+        Conversely, in the DiffuGPT paper they sample 1/T% tokens at random.
         """
 
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
         assert temperature > 0
-        
+        assert input_ids[0,0] == 50256  # <|endoftext|> token
+
         self.eval()
         input_ids = input_ids.to(self.device)
 
@@ -268,14 +374,17 @@ class GPT2(pl.LightningModule):
         # Full attention mask for inference
         attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
         
+        # To store intermediate steps
+        xs = [x.clone()]
+
         # Gradually unmask tokens
         for step in range(num_steps, 0, -1):
             
             # Get masked positions
             mask = (x == self.config["mask_id"])
-            
+
             # Exit when generation is completed
-            if not any(mask):
+            if not torch.any(mask):
                 break
             
             # Forward pass to get predictions
@@ -307,7 +416,7 @@ class GPT2(pl.LightningModule):
             ).view(B, seq_len)
             
             # Right shift
-            # [0, 1, 2, 3] -> [0, 0, 1, 2]
+            # [0, 1, 2, 3, ..., n] -> [0, 0, 1, 2, ..., n-1]
             next_tokens = torch.cat(
                 [next_tokens[:,0:1], next_tokens[:, :-1]],
                  dim=1
@@ -315,7 +424,7 @@ class GPT2(pl.LightningModule):
 
             # Compute entropy for each position (along the vocabulary)
             entropy = -torch.sum(
-                probs * torch.log2(probs),
+                probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
                 axis = -1
             )
 
@@ -328,9 +437,8 @@ class GPT2(pl.LightningModule):
             # Set tokens not to be predicted at +inf
             entropy[~mask] = torch.inf
 
-            # Get the most confident predictions
-            # (lowest entropy, lowest perplexity)
-            idx_to_denoise = torch.topk(
+            # Get the most confident predictions (lowest entropy)
+            _, idx_to_denoise = torch.topk(
                 entropy,
                 k=n_tokens_per_step,
                 dim=-1,
@@ -340,14 +448,17 @@ class GPT2(pl.LightningModule):
             # Transform indices to mask
             step_mask = torch.zeros_like(mask)
             step_mask.scatter_(1, idx_to_denoise, True)
-            
-            # Only predict those
+
+            # Only predict masked tokens with highest confidence
             mask = mask & step_mask
             
             # Update the tokens that were masked
             x = torch.where(mask, next_tokens, x)
+
+            # Keep track of diffusion process
+            xs.append(x.clone())
             
-        return x
+        return xs
 
     def test_eos_prediction(self, prompt_tokens, eos_token_id, pad_token_id, num_samples=100):
         """
