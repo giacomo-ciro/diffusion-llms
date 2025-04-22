@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import lightning as pl
 from torch.utils.data import Dataset, DataLoader
+import sys
 
 class MemmapTokenDataset(Dataset):
     """
@@ -119,7 +120,7 @@ class MemmapDataModule(pl.LightningDataModule):
             )
         else:
             print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
-            exit()
+            sys.exit()
         
         # Split the dataset
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
