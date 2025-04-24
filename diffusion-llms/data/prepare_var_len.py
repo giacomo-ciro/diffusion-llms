@@ -1,6 +1,7 @@
 import time
 import sys
 import os
+import json
 
 from tqdm import tqdm
 import numpy as np
@@ -20,10 +21,11 @@ else:
 with open(CONFIG_PATH, "r") as f:
     config = json.load(f)
 
-# Get tokenizer
+# we now want to tokenize the dataset. first define the encoding function (gpt2 bpe)
 enc = tiktoken.get_encoding("gpt2")
+# however, we will define some special tokens to tackle the variable length
 eos_token_id = enc.eot_token  # Usually 50256 for GPT-2
-pad_token_id = config.get("pad_token_id", 50257)  # Use a specific pad token if defined
+pad_token_id = 50257
 context_length = config.get("context_length", 256)
 
 print(f"Using context_length: {context_length}")
@@ -32,6 +34,7 @@ print(f"PAD token ID: {pad_token_id}")
 
 # Create a synthetic dataset from openwebtext
 # We'll use existing text as both prompts and answers
+# this won't run if a subdir called openwebtext already exists in the executing directory
 print("Loading OpenWebText dataset...")
 dataset = load_dataset(
     "openwebtext",
@@ -41,22 +44,19 @@ dataset = load_dataset(
 
 def create_prompt_answer_pairs(example):
     """Split a document into prompt and answer pairs"""
-    text = example['text']
-    
+    text = example['text'] # we don't use encode_ordinary here, we want the raw text
     # Simple heuristic: split at a sentence boundary near the middle
     split_points = ['. ', '? ', '! ']
-    
-    # Find all potential split points
     positions = []
     for sep in split_points:
         pos = 0
         while True:
-            pos = text.find(sep, pos + 1)
+            pos = text.find(sep, pos + 1) 
             if pos == -1:
                 break
             positions.append(pos + len(sep) - 1)
-    
     positions.sort()
+    print(positions)
     
     # Find a split point near the middle
     if positions:
