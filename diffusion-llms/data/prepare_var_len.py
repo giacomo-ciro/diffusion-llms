@@ -1,14 +1,14 @@
 import time
 import sys
 import os
-import json
+
 from tqdm import tqdm
 import numpy as np
 import tiktoken
-from datasets import load_dataset
+from datasets import load_dataset # huggingface datasets
 
 # Command line arguments
-if len(sys.argv) >= 3:
+if len(sys.argv) == 3:
     SAMPLE_SIZE = int(sys.argv[1])
     CONFIG_PATH = sys.argv[2]
 else:
