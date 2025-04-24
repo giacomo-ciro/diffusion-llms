@@ -459,6 +459,8 @@ class GPT2(pl.LightningModule):
             xs.append(x.clone())
             
         return xs
+    
+
 
     def test_eos_prediction(self, prompt_tokens, eos_token_id, pad_token_id, num_samples=100):
         """
