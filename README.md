@@ -14,7 +14,7 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 
 ## TO-DO's
 - [ ] Check correctness of `prepare_var_len.py` script (generate dataset of sequences of text + eos + pad. The length of the sequences is the same thanks to the pad token, but the underlying content has variable length)
-- [ ] Check correctness of the implmenetation in `model.py` (correct masking, correct loss computation, correct shifting etc)
+- [ ] Check correctness of the implementation in `model.py` (correct masking, correct loss computation, correct shifting etc)
 - [ ] Further pre-train DiffuGPT on the var len dataset
 - [ ] Create `eval.py` script to measure performance on benchmarks (the ones used in DiffuGPT paper, can copy from evaluation script on their github)
 - [ ] Train of dataset of text + mask + eos + mask (to improve eos accuracy)
@@ -23,7 +23,7 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 ### Feedback from Professor
 - ambition is good, doability is the question
 - concretize the chance of success - a series of questions that can be answered quickly at the beginning
-- control how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
+- check how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
 - be very explicit about research question, don’t fear to be overly specific, also be open about the limitations
 - change formulations to see if changing head affects anything: robustness checks
 - find sources that do not affect variance
@@ -74,14 +74,18 @@ $ python
 ```bash
 ├── diffusion-llms/ 
 │   ├── checkpoints/        # Checkpoint files for model weights
-│   ├── data/openwebtext/ 
+│       └── ymd_yymmdd_HMS_hh_mm_ss/ # Example: ymd_250424_HMS_17_07_59/
+│           └── config.json
+│   ├── data/
+│       ├── openwebtext/
+│       ├── inspect_dataset.py
+│       ├── prepare_var_len.py # Script for generating variable length dataset
 │       ├── prepare.py      # Script for tokenizing and preparing dataset
 │       ├── train_1M.bin
 │       ├── train_1M.txt
 │       └── etc.
-│   ├── attention_patch.py
+│   ├── attention_patch.py  # from DiffuLLaMa
 │   ├── config.json         # Default configuration file
-│   ├── configurator.py     # Configuration utilities
 │   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
 │   ├── gpt2.py             # Core GPT-2 model architecture
 │   ├── main.ipynb          # only for testing, ignore

@@ -15,7 +15,7 @@ else:
     print("Please, provide sample size. For example, run \"python prepare.py 100\"")
     sys.exit()
 
-num_proc = os.cpu_count()
+#num_proc = os.cpu_count()
 
 # full datast takes 54GB in huggingface .cache dir, about 8M documents (8,013,769)
 dataset = load_dataset(
@@ -76,7 +76,6 @@ arr = np.memmap(
 idx = 0
 desc = "Writing to .bin (ETA not available because we are working with IterableDataset)"
 for sample in tqdm(tokenized, desc=desc):
-
     # Write into mmap
     sample_len = sample["len"]
     arr[idx: idx+sample_len] = np.array(sample["ids"])
