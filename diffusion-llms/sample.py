@@ -37,7 +37,7 @@ for _ in range(config["n_samples"]):
         input_ids, 
         max_new_tokens=config.get("max_new_tokens", 128),
         temperature=config.get("temperature"),
-        top_k=config.get("top_k")
+        top_k=config.get("top_k"),
     )
 
     # Illustrate the diffusion process
