@@ -18,6 +18,7 @@ else:
 #num_proc = os.cpu_count()
 
 # full datast takes 54GB in huggingface .cache dir, about 8M documents (8,013,769)
+# this won't run if a subdir called openwebtext already exists in the executing directory
 dataset = load_dataset(
     "openwebtext",
     split = "train",
