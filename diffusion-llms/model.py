@@ -143,7 +143,7 @@ class GPT2(pl.LightningModule):
             attn_mask = attn_mask
         ).logits
 
-        if targets:
+        if targets is not None:
             if input_mask is not None:
                 B, seq_len, vocab_size = logits.shape
 
