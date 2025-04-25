@@ -1,2 +1,8 @@
-Lambada: 0.2575198913254415
-Hellaswag first 100: 0.36633663366336633        Qui però ho fatto un metodo diverso dal loro, quindi sarebbe da rivedere
+Lambada:    tutti:     0.258                (random = 0.000)
+# su tutti questi, la funzione eval_forward è differente
+Hellaswag   primi 100: 0.366                (random = 0.250)
+Wino        primi 100: 0.510                (random = 0.500)
+Piqa        primi 100: 0.540                (random = 0.500)
+Siqa        primi 100: 0.380                (random = 0.333)
+Infilling   rouge1=10.79, rouge2=0.90, rougeL=9.84, rougeAvg=7.17
+TriQA       primi 100: 1.333 (di f1 score)
