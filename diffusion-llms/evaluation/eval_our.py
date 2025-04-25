@@ -53,6 +53,116 @@ def eval_Lambada(model, tokenizer, config):
     print('acc:', cor/total_cnt)
 
 
+
+import re
+import numpy as np
+
+def preprocess(text):
+    text = text.strip()
+    # NOTE: Brackets are artifacts of the WikiHow dataset portion of HellaSwag.
+    text = text.replace(" [title]", ". ")
+    text = re.sub("\\[.*?\\]", "", text)
+    text = text.replace("  ", " ")
+    return text
+
+def eval_hellaswag(model, tokenizer, max_iter = np.inf):
+    from datasets import load_dataset
+    ds = load_dataset("Rowan/hellaswag", split='validation')
+
+    total_cnt = 0
+    cor = 0
+
+    for doc in ds:
+        total_cnt += 1
+        if total_cnt % 1000 == 0:
+            print('total cnt:', total_cnt)
+        ctx = doc["ctx_a"] + " " + doc["ctx_b"].capitalize()
+
+        query = preprocess(doc["activity_label"] + ": " + ctx)
+        # print("query: ", query) 
+        choices = [preprocess(ending) for ending in doc["endings"]]
+        # print("choices: ", choices)
+        gold = int(doc["label"])
+        # print(gold)
+
+        score_list = []
+        prefix = [50256] + tokenizer.encode(query)
+
+        for choice in choices:
+
+            x0 = prefix + tokenizer.encode(choice)
+            input_ids = torch.tensor(
+                x0).unsqueeze(0).to('cuda')          # x0 is all the line
+            src_mask = torch.Tensor([[1]*len(prefix)+[0]*(len(x0)-len(prefix))]).to('cuda')
+            score = model.eval_forward(input_ids, src_mask)
+            # import pdb; pdb.set_trace();
+            score_list.append(score)
+        pred = np.argmax(np.array(score_list))
+
+        if pred == gold:
+            cor += 1
+        print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        if total_cnt >= max_iter:
+            break
+
+        
+    print('acc:', cor/total_cnt)  
+
+
+
+def eval_wino(model, tokenizer, max_iter = np.inf):
+    from datasets import load_dataset
+    ds = load_dataset("allenai/winogrande", "winogrande_xl", split='validation', trust_remote_code=True)
+
+    total_cnt = 0
+    cor = 0
+
+    for doc in ds:
+        total_cnt += 1
+        
+        idx = doc["sentence"].index("_")
+        
+        options = [doc["option1"], doc["option2"]]
+
+        answer_to_num = {"1": 0, "2": 1}
+        gold = answer_to_num[doc["answer"]]
+
+        score_list = []
+        # print("options: ", options)
+        # print("suffix: ", doc["sentence"][idx+1:].strip())
+        # print("prefix: ", doc["sentence"][:idx])
+        
+        for opt in options:
+            target_str = opt 
+            suffix_str = doc["sentence"][idx+1:].strip()
+            target_id = tokenizer.encode(target_str) # , add_special_tokens=False)
+            suffix_id = tokenizer.encode(suffix_str)    #, add_special_tokens=False)
+            prefix_str = doc["sentence"][:idx]
+            prefix_id = [50256] + tokenizer.encode(prefix_str) #, add_special_tokens=False)
+
+            x0 = prefix_id + target_id + suffix_id
+            # src_mask = torch.Tensor([[1]*len(prefix_id)+[0]*(len(x0)-len(prefix_id))]).to("cuda")      # da capire perchè loro lo fanno così
+            src_mask = torch.Tensor([[1]*len(prefix_id)+[0]*len(target_id) + [1]* len(suffix_id)]).to("cuda")      # da capire perchè lo fanno così
+
+            input_ids = torch.tensor(
+                x0).unsqueeze(0).to('cuda')          # x0 is all the line
+            score = model.eval_forward(input_ids, src_mask)
+            # import pdb; pdb.set_trace();
+            score_list.append(score)
+        pred = np.argmax(np.array(score_list))
+
+        if pred == gold:
+            cor += 1
+        # print(total_cnt, cor/total_cnt)
+        if total_cnt >= max_iter:
+            break
+        
+    print('acc:', cor/total_cnt)  
+
+
+
+
+
 def print_output(x, tokenizer, mask_token):
     print("-"*89)
     out = tokenizer.decode(
@@ -76,17 +186,17 @@ def main():
     # Tokenize
     tokenizer= tiktoken.get_encoding("gpt2")
 
-    # Mask token
-    mask_token = tokenizer.decode([config["mask_id"]])
+    # # Mask token
+    # mask_token = tokenizer.decode([config["mask_id"]])
 
-    # Get prompt
-    input_ids = torch.tensor(
-        [50256] + tokenizer.encode(config["user_prompt"])
-    ).unsqueeze(0)
+    # # Get prompt
+    # input_ids = torch.tensor(
+    #     [50256] + tokenizer.encode(config["user_prompt"])
+    # ).unsqueeze(0)
 
     # Load model
-    model = GPT2(CONFIG_PATH).to('cuda')
-    # model = torch.compile(model).to('cuda')
+    model = GPT2(CONFIG_PATH)
+    model = torch.compile(model).to('cuda')
 
         
     # # List of tensors of shape (B, seq_len)
@@ -100,7 +210,10 @@ def main():
     # # Illustrate the diffusion process
     # print_output(xs[-1][0], tokenizer, mask_token)
 
-    eval_Lambada(model, tokenizer, config)
+
+    # eval_Lambada(model, tokenizer, config)
+    # eval_hellaswag(model, tokenizer, 1)
+    eval_wino(model, tokenizer)
 
 
 
