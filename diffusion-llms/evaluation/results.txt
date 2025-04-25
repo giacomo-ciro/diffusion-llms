@@ -1,0 +1,2 @@
+Lambada: 0.2575198913254415
+Hellaswag first 100: 0.36633663366336633        Qui però ho fatto un metodo diverso dal loro, quindi sarebbe da rivedere
