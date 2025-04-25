@@ -8,6 +8,8 @@ from torch.optim.lr_scheduler import OneCycleLR
 from transformers import GPT2LMHeadModel, GPT2Config, GenerationConfig
 from attention_patch import replace_attention_mask
 from utils import get_annealing_mask, get_causal_mask
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+
 
 # Modify the HF implementation so 
 # the attention mask provided is actually used
@@ -349,9 +351,9 @@ class GPT2(pl.LightningModule):
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
         assert temperature > 0
         assert input_ids[0,0] == 50256  # <|endoftext|> token
-
+        device = 'cuda'
         self.eval()
-        input_ids = input_ids.to(self.device)
+        input_ids = input_ids.to(device)
 
         # Get dimensions
         B = input_ids.shape[0]
@@ -359,7 +361,7 @@ class GPT2(pl.LightningModule):
         
         # Start with fully masked sequence for the new tokens
         seq_len = prompt_len + max_new_tokens
-        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=self.device)
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
         
         # (id, ..., id, msk, ..., msk)
         # [B, seq_len]
@@ -372,7 +374,7 @@ class GPT2(pl.LightningModule):
         n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
         
         # Full attention mask for inference
-        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(device)
         
         # To store intermediate steps
         xs = [x.clone()]
@@ -459,6 +461,203 @@ class GPT2(pl.LightningModule):
             xs.append(x.clone())
             
         return xs
+    
+    def eval_forward(
+        self,
+        input_ids,
+        src_mask,
+    ):
+
+
+        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
+        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        device = 'cuda'
+        self.eval()
+        input_ids = input_ids.to(device)
+        # Get dimensions
+        B = input_ids.shape[0]
+        assert(B == 1) # just for now
+        seq_len = input_ids.shape[1]
+        
+        # Start with fully masked sequence for the new tokens
+        max_new_tokens = src_mask.shape[1] - torch.sum(src_mask[0]).item()
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
+        
+        # (id, ..., id, msk, ..., msk)
+        # [B, seq_len]
+        x = torch.where(src_mask == 1, input_ids, x)
+        
+        # Number of diffusion steps
+        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
+        
+        # Number of tokens to be denoised at each step
+        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        
+        # Full attention mask for inference
+        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        
+        # To store intermediate steps
+        xs = [x.clone()]
+        logit_score = 0.0
+
+        # Gradually unmask tokens
+        for step in range(num_steps, 0, -1):
+            
+            # Get masked positions
+            mask = (x == self.config["mask_id"])
+
+            # Exit when generation is completed
+            if not torch.any(mask):
+                break
+            
+            # Forward pass to get predictions
+            with torch.no_grad():
+                logits, _ = self.forward(
+                    input_ids=x,
+                    targets=None,
+                    input_mask=None,
+                    attn_mask=attn_mask
+                )
+            
+            # da capire se possono andare sotto zero
+            positional_logits = torch.zeros((B, seq_len), device=device)
+            for i in range(seq_len):
+                if mask[0][i]:
+                    positional_logits[0][i] = (logits[:, i, input_ids[:, i]].item())
+            
+            # print("positional_logits:", positional_logits)
+            
+
+
+            # Get the most confident predictions (lowest entropy)
+            logits_to_denoise, idx_to_denoise = torch.topk(
+                positional_logits,
+                k=n_tokens_per_step,
+                dim=-1,
+                largest=True
+            )
+            logit_score += torch.sum(logits_to_denoise)
+
+            # Transform indices to mask
+            step_mask = torch.zeros_like(mask)
+            step_mask.scatter_(1, idx_to_denoise, True)
+
+            # Only predict masked tokens with highest confidence
+            mask = mask & step_mask
+            
+            # Update the tokens that were masked
+            x = torch.where(mask, input_ids, x)
+            # print(f"x[{step}]:", x)
+            # Keep track of diffusion process
+            xs.append(x.clone())
+            
+        logit_score /= max_new_tokens
+        return logit_score.item()
+    
+
+  
+
+
+    def eval_forward_new(
+        self,
+        input_ids,
+        choice_ids,
+    ):
+        """
+        Generate text using diffusion process.
+        The total number T of diffusion steps is given.
+        At each step, un-mask  1/T % of tokens. 
+        The tokens to be un-masked are the ones with highest confidence (lowest entropy).
+        Conversely, in the DiffuGPT paper they sample 1/T% tokens at random.
+        """
+
+        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
+        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        device = 'cuda'
+        self.eval()
+        input_ids = input_ids.to(device)
+        # Get dimensions
+        B = input_ids.shape[0]
+        assert(B == 1) # just for now
+        prompt_len = input_ids.shape[1]
+        
+        # Start with fully masked sequence for the new tokens
+        max_new_tokens = choice_ids.shape[1]
+        final_sentence_ids = torch.cat([input_ids, choice_ids], dim=1)
+        seq_len = prompt_len + max_new_tokens
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
+        
+        # (id, ..., id, msk, ..., msk)
+        # [B, seq_len]
+        x[:, :prompt_len] = input_ids
+        
+        # Number of diffusion steps
+        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
+        
+        # Number of tokens to be denoised at each step
+        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        
+        # Full attention mask for inference
+        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        
+        # To store intermediate steps
+        xs = [x.clone()]
+        logit_score = 0.0
+
+        # Gradually unmask tokens
+        for step in range(num_steps, 0, -1):
+            
+            # Get masked positions
+            mask = (x == self.config["mask_id"])
+
+            # Exit when generation is completed
+            if not torch.any(mask):
+                break
+            
+            # Forward pass to get predictions
+            with torch.no_grad():
+                logits, _ = self.forward(
+                    input_ids=x,
+                    targets=None,
+                    input_mask=None,
+                    attn_mask=attn_mask
+                )
+            
+            # da capire se possono andare sotto zero
+            positional_logits = torch.zeros((B, max_new_tokens), device=device)
+            for i in range(max_new_tokens):
+                if mask[0][prompt_len+i]:
+                    positional_logits[0][i] = (logits[:, prompt_len+i, choice_ids[:, i]].item())
+            
+            # print("positional_logits:", positional_logits)
+            
+
+
+            # Get the most confident predictions (lowest entropy)
+            logits_to_denoise, idx_to_denoise = torch.topk(
+                positional_logits,
+                k=n_tokens_per_step,
+                dim=-1,
+                largest=True
+            )
+            idx_to_denoise += prompt_len
+            logit_score += torch.sum(logits_to_denoise)
+
+            # Transform indices to mask
+            step_mask = torch.zeros_like(mask)
+            step_mask.scatter_(1, idx_to_denoise, True)
+
+            # Only predict masked tokens with highest confidence
+            mask = mask & step_mask
+            
+            # Update the tokens that were masked
+            x = torch.where(mask, final_sentence_ids, x)
+
+            # Keep track of diffusion process
+            xs.append(x.clone())
+            
+        logit_score /= max_new_tokens
+        return logit_score.item()
     
 
 

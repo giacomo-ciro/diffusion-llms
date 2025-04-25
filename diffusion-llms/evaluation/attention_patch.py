@@ -71,7 +71,7 @@ def forward_gpt2(
     ## Add by DiffuGPT, adapting for 4d attention-mask.
     if attention_mask is not None and len(attention_mask.shape) == 4: 
         attention_mask = attention_mask
-        print("logging....attention-mask for 4d")
+        # print("logging....attention-mask for 4d")
     else:
         _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
         attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
