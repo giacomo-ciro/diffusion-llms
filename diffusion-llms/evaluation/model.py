@@ -556,12 +556,12 @@ class GPT2(pl.LightningModule):
     
 
   
-
-
-    def eval_forward_new(
+    def generate_infilling(
         self,
         input_ids,
-        choice_ids,
+        src_mask,
+        temperature,
+        top_k
     ):
         """
         Generate text using diffusion process.
@@ -579,17 +579,15 @@ class GPT2(pl.LightningModule):
         # Get dimensions
         B = input_ids.shape[0]
         assert(B == 1) # just for now
-        prompt_len = input_ids.shape[1]
+        seq_len = input_ids.shape[1]
         
         # Start with fully masked sequence for the new tokens
-        max_new_tokens = choice_ids.shape[1]
-        final_sentence_ids = torch.cat([input_ids, choice_ids], dim=1)
-        seq_len = prompt_len + max_new_tokens
+        max_new_tokens = src_mask.shape[1] - torch.sum(src_mask[0]).item()
         x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
         
         # (id, ..., id, msk, ..., msk)
         # [B, seq_len]
-        x[:, :prompt_len] = input_ids
+        x = torch.where(src_mask == 1, input_ids, x)
         
         # Number of diffusion steps
         num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
@@ -602,7 +600,7 @@ class GPT2(pl.LightningModule):
         
         # To store intermediate steps
         xs = [x.clone()]
-        logit_score = 0.0
+
 
         # Gradually unmask tokens
         for step in range(num_steps, 0, -1):
@@ -623,25 +621,54 @@ class GPT2(pl.LightningModule):
                     attn_mask=attn_mask
                 )
             
-            # da capire se possono andare sotto zero
-            positional_logits = torch.zeros((B, max_new_tokens), device=device)
-            for i in range(max_new_tokens):
-                if mask[0][prompt_len+i]:
-                    positional_logits[0][i] = (logits[:, prompt_len+i, choice_ids[:, i]].item())
+            # Apply temperature and optional top-k sampling
+            logits = logits / temperature
+            if top_k is not None:
+                v, _ = torch.topk(
+                    input = logits,
+                    k = min(top_k, logits.size(-1)),
+                    dim=-1
+                )
+                logits[logits < v[:, :, [-1]]] = -float('Inf')
             
-            # print("positional_logits:", positional_logits)
-            
+            # Convert to probabilities
+            probs = torch.softmax(logits, dim=-1)
 
+            # Sample from the distribution
+            next_tokens = torch.multinomial(
+                probs.view(-1, probs.size(-1)), 
+                num_samples=1
+            ).view(B, seq_len)
+            
+            # Right shift
+            # [0, 1, 2, 3, ..., n] -> [0, 0, 1, 2, ..., n-1]
+            next_tokens = torch.cat(
+                [next_tokens[:,0:1], next_tokens[:, :-1]],
+                 dim=1
+            )
+
+            # Compute entropy for each position (along the vocabulary)
+            entropy = -torch.sum(
+                probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
+                axis = -1
+            )
+
+            # Deal with right shift in the entropy computation
+            # probs at position i refer to (i+1)-th token in the output
+            entropy = torch.cat(
+                [entropy[:, 0:1], entropy[:, :-1]],
+                 dim=1
+            )
+            # Set tokens not to be predicted at +inf
+            entropy[~mask] = torch.inf
 
             # Get the most confident predictions (lowest entropy)
-            logits_to_denoise, idx_to_denoise = torch.topk(
-                positional_logits,
+            _, idx_to_denoise = torch.topk(
+                entropy,
                 k=n_tokens_per_step,
                 dim=-1,
-                largest=True
+                largest=False
             )
-            idx_to_denoise += prompt_len
-            logit_score += torch.sum(logits_to_denoise)
 
             # Transform indices to mask
             step_mask = torch.zeros_like(mask)
@@ -651,13 +678,14 @@ class GPT2(pl.LightningModule):
             mask = mask & step_mask
             
             # Update the tokens that were masked
-            x = torch.where(mask, final_sentence_ids, x)
+            x = torch.where(mask, next_tokens, x)
 
             # Keep track of diffusion process
             xs.append(x.clone())
             
-        logit_score /= max_new_tokens
-        return logit_score.item()
+        return xs[-1]
+
+    
     
 
 
