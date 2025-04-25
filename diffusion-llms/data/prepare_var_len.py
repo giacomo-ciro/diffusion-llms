@@ -110,7 +110,6 @@ def process_prompt_answer_pair(example):
             prompt_length = min_prompt_length
             answer_length = min_answer_length
     
-
         # Randomly truncate by 0-10% more to add variety to EOS positions
         if combined_content_length > 100:  # Only for longer contents
             random_trunc = np.random.randint(0, int(combined_content_length * 0.1))
@@ -195,18 +194,19 @@ def format_file_size(tot_len):
 # Use a distinct filename to indicate variable length dataset with improvements
 filename = f'var_len_fixed_{format_file_size(tot_len)}'
 arr = np.memmap(
-    os.path.join(os.path.dirname(__file__), f'{filename}.bin'),
+    os.path.join(os.path.dirname(__file__), f'openwebtext_local/{filename}.bin'),
     dtype=np.uint16,
     mode='w+',
     shape=(tot_len,)
 )
+
 
 # Write the entire dataset at once
 arr[:] = np.array(full_dataset, dtype=np.uint16)
 arr.flush()
 
 # Write metadata file with statistics
-with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
+with open(os.path.join(os.path.dirname(__file__), f'openwebtext_local/{filename}.txt'), "w") as f:
     f.write(
 f"""Variable Length Dataset (Fixed Structure)
 Generated on: {time.strftime("%d-%m-%Y %H:%M:%S")}
@@ -223,7 +223,7 @@ Format: [prompt tokens] [answer tokens] [EOS token={eos_token_id}] [PAD tokens={
 
 print(f"Variable length dataset saved as {filename}.bin")
 print(f"Make sure to update your config.json to use this dataset:")
-print(f"  \"memmap_path\": \"./data/openwebtext/{filename}.bin\",")
+print(f"  \"memmap_path\": \"./data/openwebtext_local/{filename}.bin\",")
 print(f"  \"eos_token_id\": {eos_token_id},")
 print(f"  \"pad_token_id\": {pad_token_id},")
 print(f"  \"variable_length\": true")
