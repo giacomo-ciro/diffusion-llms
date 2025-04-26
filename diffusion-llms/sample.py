@@ -22,9 +22,14 @@ tokenizer= tiktoken.get_encoding("gpt2")
 mask_token = tokenizer.decode([config["mask_id"]])
 
 # Get prompt
-input_ids = torch.tensor(
-    [50256] + tokenizer.encode(config["user_prompt"])
-).unsqueeze(0)
+if config["user_prompt"]:
+    input_ids = torch.tensor(
+        [50256] + tokenizer.encode(config["user_prompt"])
+    ).unsqueeze(0)
+else:
+    input_ids = torch.tensor(
+        [50256]
+    ).unsqueeze(0)
 
 # Load model
 model = GPT2(CONFIG_PATH)
@@ -34,10 +39,7 @@ for _ in range(config["n_samples"]):
     
     # List of tensors of shape (B, seq_len)
     xs = model.generate(
-        input_ids, 
-        max_new_tokens=config.get("max_new_tokens", 128),
-        temperature=config.get("temperature"),
-        top_k=config.get("top_k")
+        input_ids,
     )
 
     # Illustrate the diffusion process
