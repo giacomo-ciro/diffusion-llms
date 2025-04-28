@@ -427,7 +427,7 @@ class GPT2(pl.LightningModule):
                 step_mask = torch.zeros_like(mask).to(torch.bool)
                 for b in range(step_mask.shape[0]):
                     nonzero = mask[b].nonzero().flatten().numpy()
-                    np.random.permutation(nonzero)
+                    np.random.shuffle(nonzero)
                     idx = nonzero[:n_tokens_per_step].tolist()
                     step_mask[b, idx] = True
 

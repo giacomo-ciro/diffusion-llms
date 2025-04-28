@@ -48,4 +48,5 @@ for _ in range(config["n_samples"]):
             x[0].tolist()
         ).replace(mask_token, "<mask>")
         print(out)
+        print()
     print("-"*89)
