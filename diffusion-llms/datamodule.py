@@ -83,7 +83,12 @@ class MemmapTokenDataset(Dataset):
                 else:
                     mask = content_mask
 
-        return torch.from_numpy(X), torch.from_numpy(y), mask
+        # Cast to correct type
+        X = torch.from_numpy(X).to(torch.int64)
+        y = torch.from_numpy(y).to(torch.int64)
+
+        # (int, int, bool)
+        return X, y, mask
     
     
 class MemmapDataModule(pl.LightningDataModule):
@@ -122,6 +127,7 @@ class MemmapDataModule(pl.LightningDataModule):
             exit()
         
         # Split the dataset
+        assert self.val_test_tokens < len(self.data)
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
             self.data,
             # Use the given number for test and val, rest for token

@@ -18,22 +18,33 @@ else:
 num_proc = os.cpu_count()
 
 # full datast takes 54GB in huggingface .cache dir, about 8M documents (8,013,769)
-dataset = load_dataset(
-    "openwebtext",
-    split = "train",
-    streaming=True,
-).take(SAMPLE_SIZE)
-
-# more than 15T tokens of cleaned and deduplicated english web data from CommonCrawl
 # dataset = load_dataset(
-#     "HuggingFaceFW/fineweb",    
-#     "CC-MAIN-2013-20",  
+#     "openwebtext",
 #     split = "train",
 #     streaming=True,
+#     trust_remote_code=True
+# ).shuffle(
+    # buffer_size=10000,  # Larger buffer = better randomization
+    # seed=42
 # ).take(SAMPLE_SIZE)
 
-# we now want to tokenize the dataset. first define the encoding function (gpt2 bpe)
+# More than 15T tokens of cleaned and de-duplicated english web data from CommonCrawl
+dataset = load_dataset(
+    "HuggingFaceFW/fineweb",    
+    "CC-MAIN-2013-20",  
+    split = "train",
+    streaming=True,
+    trust_remote_code=True,
+).shuffle(
+    buffer_size=10_000
+).take(SAMPLE_SIZE)     # not random
+# to get random, use .shuffle(buffer_size=10000,  seed=42)
+# larger buffer = better randomization
+
+# Tokenizer
 enc = tiktoken.get_encoding("gpt2")
+
+# Append eos
 def process(example):
     ids = enc.encode_ordinary(example['text']) # encode_ordinary ignores any special tokens
     ids.append(enc.eot_token) # add the end of text token, e.g. 50256 for gpt2 bpe
@@ -54,7 +65,6 @@ for i in tokenized:
     # print(i)
 print(f"Number of Tokens = {tot_len:,}")
 
-# Create a memmap array
 # File name
 def format_file_size(tot_len):
     if tot_len < 1000:
@@ -66,9 +76,13 @@ def format_file_size(tot_len):
     else:
         return f'{tot_len/1e9:.0f}B'
 filename = f'train_{format_file_size(tot_len)}'
+
+# Create a memmap array
+memmap_path = os.path.join(os.path.dirname(__file__), f'{filename}.bin')
+memmap_dtype = np.uint16
 arr = np.memmap(
-    os.path.join(os.path.dirname(__file__), f'{filename}.bin'),
-    dtype=np.uint16,
+    memmap_path,
+    dtype=memmap_dtype,
     mode='w+',
     shape=(tot_len,)
 )
@@ -76,24 +90,36 @@ arr = np.memmap(
 idx = 0
 desc = "Writing to .bin (ETA not available because we are working with IterableDataset)"
 for sample in tqdm(tokenized, desc=desc):
-
     # Write into mmap
     sample_len = sample["len"]
     arr[idx: idx+sample_len] = np.array(sample["ids"])
     idx += sample_len
     arr.flush()
 
-# train.bin is ~17GB, val.bin ~8.5MB
-# train has ~9B tokens (9,035,582,198)
-# val has ~4M tokens (4,434,897)
+# Properly close the memmap file
+del arr
 
-# to read the bin files later, e.g. with numpy:
-# m = np.memmap('train.bin', dtype=np.uint16, mode='r')
-
+# Save metadata
+print("Completed! Saving metadata...")
 with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
     f.write(
         f"""Generated on: {time.strftime("%d-%m-%Y %H:%M:%S")}
         Using: $ python prepare.py {SAMPLE_SIZE}
         Tot number of tokens: {tot_len:,}
+        dtype: {memmap_dtype}
         """
     )
+
+# Inspect generate data
+print("Inspecting generated memmap...")
+max_len = 64
+n = 5
+arr = np.memmap(memmap_path, dtype=memmap_dtype, mode='r')
+idx = np.random.randint(0, arr.shape[0], size=(n,), dtype=int)
+for i in idx:
+    sample = arr[i:i+max_len]
+    print()
+    print(
+        enc.decode(sample.tolist())
+    ) 
+print("Done!")
