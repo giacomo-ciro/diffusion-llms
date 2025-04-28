@@ -3,19 +3,21 @@
     "attn_annealing_steps": 1000,
     "mask_id": 10541,
     
-    "init_from":"",
+    "init_from":"scratch",
     "resume_training":false,
-    "memmap_path": "./data/openwebtext/train_113K.bin",
+    "memmap_path": "./data/train_52K.bin",
     "context_length": 1024,
     "n_embd": 768,
     "n_layer": 12,
     "n_head": 12, 
     
     "n_epochs": 1,
-    "n_steps": 15000,
+    "n_steps": 800,
+    "val_check_interval": 100,
+    "val_test_tokens": 1000,
 
     "batch_size": 8,
-    "accumulate_grad": 16,
+    "accumulate_grad": 8,
     "grad_clip":1,
 
     "betas": [0.9,0.95],
@@ -28,13 +30,11 @@
     "mask_ratio": 0.15,
     "pad_id": -1,
     "mask_value": -1,
-    "val_test_tokens": 10000,
 
     "enable_checkpointing": true,
     "save_dir": "./checkpoints/",
-    "val_check_interval": 1000,
     "wandb": true,
-    "run_name": "gpt2-scratch-openwebtext",
+    "run_name": "gpt2-scratch-fineweb",
     "project_name": "diffusion-llms",
 
     "user_prompt": "Hello, what's your name?",
