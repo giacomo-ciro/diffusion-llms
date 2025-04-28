@@ -139,6 +139,7 @@ class GPT2(pl.LightningModule):
         assert len(attn_mask.shape) == 4
         non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
+        # self.log("global_step", self.global_step, prog_bar = True)
 
         # Forward pass
         logits = self.gpt2.forward(
@@ -529,7 +530,7 @@ class GPT2(pl.LightningModule):
             # Check if EOS has highest probability at any position
             predicted_tokens = torch.argmax(logits[0, prompt_len:], dim=-1).cpu().numpy()
             has_eos = eos_token_id in predicted_tokens
-            eos_pos = np.argmax(eos_probs) if has_eos else -1
+            # eos_pos = np.argmax(eos_probs) if has_eos else -1
             
             eos_predictions.append(has_eos)
             eos_confidences.append(np.max(eos_probs))

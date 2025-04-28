@@ -93,6 +93,8 @@ def main():
     )
 
     # Train
+    # Epoch 0:  43%|▍| 378/883 [...
+    #                   ^^ number of forward calls (if accumulate_grad == 1, then it coincides with optimizer steps)
     trainer.fit(
         model,
         datamodule,
