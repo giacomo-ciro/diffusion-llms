@@ -32,6 +32,9 @@ else:
         [50256]
     ).unsqueeze(0)
 
+# Load model
+model = GPT2(CONFIG_PATH)
+
 # Load model (new or pretrained)
 if os.path.exists(config["init_from"]):
     model = GPT2.from_pretrained(config["init_from"])
@@ -44,10 +47,6 @@ for _ in range(config["n_samples"]):
     # List of tensors of shape (B, seq_len)
     xs = model.generate(
         input_ids,
-        max_new_tokens= config["max_new_tokens"],
-        temperature= config["temperature"],
-        top_k= config["top_k"],
-        denoising_strategy= config["denoising_strategy"]
     )
 
     # Illustrate the diffusion process

@@ -1,9 +1,9 @@
 {
-  "pipeline": "diffusion",
+  "pipeline": "arm",
   "attn_annealing_steps": 1000,
   "mask_id": 10541,
   
-  "init_from":"diffugpt",
+  "init_from":"gpt2",
   "resume_training":false,
   "memmap_path": "./data/openwebtext/train_113K.bin",
   "context_length": 1024,
@@ -40,7 +40,7 @@
   "user_prompt": "Today is a wonderful day,",
   "n_samples": 1,
   "temperature": 1.0,
-  "max_new_tokens": 10,
+  "max_new_tokens": 128,
   "top_k": null,
   "diffusion_steps": 64,
   "repetition_penalty": 1.2,
