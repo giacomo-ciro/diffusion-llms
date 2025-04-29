@@ -43,5 +43,7 @@
   "max_new_tokens": 10,
   "top_k": null,
   "diffusion_steps": 64,
+  "repetition_penalty": 1.2,
+  "do_sample": false,
   "denoising_strategy": "random"
 }
