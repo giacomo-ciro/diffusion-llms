@@ -1,9 +1,9 @@
 {
-  "pipeline": "arm",
+  "pipeline": "diffusion",
   "attn_annealing_steps": 1000,
   "mask_id": 10541,
   
-  "init_from":"gpt2",
+  "init_from":"diffugpt",
   "resume_training":false,
   "memmap_path": "./data/openwebtext/train_113K.bin",
   "context_length": 1024,
@@ -45,5 +45,5 @@
   "diffusion_steps": 64,
   "repetition_penalty": 1.2,
   "do_sample": false,
-  "denoising_strategy": "random"
+  "denoising_strategy": "entropy"
 }

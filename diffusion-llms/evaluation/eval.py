@@ -50,8 +50,6 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
     total_cnt = 0
     cor = 0
     mask_token = tokenizer.decode([config["mask_id"]])
-    temperature = config.get("temperature")
-    top_k = config.get("top_k")
     with open("evaluation/lambada_test_plain_text.txt", "r", encoding="utf-8") as file:
         for line in file:
             total_cnt += 1
@@ -68,14 +66,13 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
             # NOTE: args.diffusion_steps = masked_nums        # # in diffugpt they set the diffusion step it in this way
             xs = model.generate(
                 prefix,
-                max_new_tokens=masked_nums,
-                temperature=temperature,
-                top_k=top_k,
+                max_new_tokens=masked_nums
             )
             x = xs[-1][0]
             pred = tokenizer.decode(x.tolist()[1:]).replace(mask_token, "<mask>")
             if pred.strip() == line.strip():
                 cor += 1
+            print(pred.strip(), "\n" , line.strip(), "\n\n")
 
             # probabilmente c'è un errore nel loro codice, perchè conta la corretta 2 volte
             # if pred.strip() == line.split()[-1].strip():
@@ -485,6 +482,8 @@ def main():
     device = get_device()
     model = GPT2(CONFIG_PATH)
     model = torch.compile(model).to(device)
+
+
 
     if evaluation_type == "lambada":
         eval_Lambada(model, tokenizer, config, max_iter)

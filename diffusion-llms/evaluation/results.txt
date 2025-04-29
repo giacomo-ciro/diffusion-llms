@@ -6,3 +6,14 @@ Piqa        primi 100: 0.540                (random = 0.500)
 Siqa        primi 100: 0.380                (random = 0.333)
 Infilling   rouge1=10.79, rouge2=0.90, rougeL=9.84, rougeAvg=7.17
 TriQA       primi 100: 1.333 (di f1 score)
+
+
+
+Nuovi test (luca):
+Lambada         Tutto
+acc: 0.0394
+speed: 21.070 step/sec
+
+Hellaswag       (primi 200) (stabile)
+acc: 0.33
+speed: 0.685 step/sec

@@ -23,7 +23,6 @@ class GPT2(pl.LightningModule):
         config_path,
     ):
         super().__init__()
-
         # Load configuration file
         self.config_path = config_path
         with open(config_path, "r") as f:
@@ -170,11 +169,12 @@ class GPT2(pl.LightningModule):
         return logits, loss
 
     def training_step(self, batch, batch_idx):
-        
+        device = next(self.parameters()).device
+
         # Read in batch
         input_ids, targets, input_mask = batch        
-        input_ids = input_ids.cpu().to(torch.int64).to(self.device) # (B, context_length)
-        targets = targets.cpu().to(torch.int64).to(self.device) # (B, context_length)
+        input_ids = input_ids.cpu().to(torch.int64).to(device) # (B, context_length)
+        targets = targets.cpu().to(torch.int64).to(device) # (B, context_length)
 
         # Prepare the attention mask:
         B, context_length = input_ids.shape
@@ -305,7 +305,8 @@ class GPT2(pl.LightningModule):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.Tensor
+        input_ids: torch.Tensor,
+        max_new_tokens: int = -1
     )->list[torch.Tensor]:
         """
         Samples from the model according to the specified pipeline. 
@@ -315,9 +316,12 @@ class GPT2(pl.LightningModule):
         stage of the diffusion process.
         When pipeline is arm, the list has length 1.
         """
+        if max_new_tokens == -1:
+            max_new_tokens = self.config["max_new_tokens"]
+        assert max_new_tokens > 0, "max_new_tokens must be greater than 0."
         if self.config["pipeline"] == "arm":
             genconfig = GenerationConfig(
-                max_new_tokens = self.config["max_new_tokens"],
+                max_new_tokens = max_new_tokens,
                 temperature=self.config["temperature"],
                 top_k=self.config["top_k"],
             )
@@ -334,7 +338,7 @@ class GPT2(pl.LightningModule):
         elif self.config["pipeline"] == "diffusion":
             xs = self.generate_diffusion(
                 input_ids,
-                max_new_tokens = self.config["max_new_tokens"],
+                max_new_tokens = max_new_tokens,
                 temperature=self.config["temperature"],
                 top_k=self.config["top_k"],
                 denoising_strategy=self.config["denoising_strategy"]
@@ -366,7 +370,8 @@ class GPT2(pl.LightningModule):
         assert input_ids[0,0] == 50256  # <|endoftext|> token
 
         self.eval()
-        input_ids = input_ids.to(self.device)
+        device = next(self.parameters()).device
+        input_ids = input_ids.to(device)
 
         # Get dimensions
         B = input_ids.shape[0]
@@ -374,7 +379,7 @@ class GPT2(pl.LightningModule):
         
         # Start with fully masked sequence for the new tokens
         seq_len = prompt_len + max_new_tokens
-        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=self.device)
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
         
         # (id, ..., id, msk, ..., msk)
         # [B, seq_len]
@@ -442,7 +447,7 @@ class GPT2(pl.LightningModule):
                 # Choose n_tokens_per_step at random among the masked ones
                 step_mask = torch.zeros_like(mask).to(torch.bool)
                 for b in range(step_mask.shape[0]):
-                    nonzero = mask[b].nonzero().flatten().numpy()
+                    nonzero = mask[b].nonzero().flatten().cpu().numpy()
                     np.random.shuffle(nonzero)
                     idx = nonzero[:n_tokens_per_step].tolist()
                     step_mask[b, idx] = True
@@ -601,99 +606,6 @@ class GPT2(pl.LightningModule):
         return perplexity.item()
 
 
-
-
-
-
-    def eval_forward_backup(
-        self,
-        input_ids,
-        src_mask,
-    ):
-
-
-        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
-        assert input_ids[0,0] == 50256  # <|endoftext|> token
-        device = 'cuda'
-        self.eval()
-        input_ids = input_ids.to(device)
-        # Get dimensions
-        B = input_ids.shape[0]
-        assert(B == 1) # just for now
-        seq_len = input_ids.shape[1]
-        
-        # Start with fully masked sequence for the new tokens
-        max_new_tokens = src_mask.shape[1] - torch.sum(src_mask[0]).item()
-        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
-        
-        # (id, ..., id, msk, ..., msk)
-        # [B, seq_len]
-        x = torch.where(src_mask == 1, input_ids, x)
-        
-        # Number of diffusion steps
-        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
-        
-        # Number of tokens to be denoised at each step
-        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
-        
-        # Full attention mask for inference
-        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
-        
-        # To store intermediate steps
-        xs = [x.clone()]
-
-        # Gradually unmask tokens
-        for step in range(num_steps, 0, -1):
-            
-            # Get masked positions
-            mask = (x == self.config["mask_id"])
-
-            # Exit when generation is completed
-            if not torch.any(mask):
-                break
-            
-            # Forward pass to get predictions
-            with torch.no_grad():
-                logits, _ = self.forward(
-                    input_ids=x,
-                    targets=None,
-                    input_mask=None,
-                    attn_mask=attn_mask
-                )
-            
-            # da capire se possono andare sotto zero
-            positional_logits = torch.zeros((B, seq_len), device=device)
-            for i in range(seq_len):
-                if mask[0][i]:
-                    positional_logits[0][i] = (logits[:, i, input_ids[:, i]].item())
-            
-            # print("positional_logits:", positional_logits)
-            
-
-
-            # Get the most confident predictions (lowest entropy)
-            logits_to_denoise, idx_to_denoise = torch.topk(
-                positional_logits,
-                k=n_tokens_per_step,
-                dim=-1,
-                largest=True
-            )
-
-            # Transform indices to mask
-            step_mask = torch.zeros_like(mask)
-            step_mask.scatter_(1, idx_to_denoise, True)
-
-            # Only predict masked tokens with highest confidence
-            mask = mask & step_mask
-            
-            # Update the tokens that were masked
-            x = torch.where(mask, input_ids, x)
-            # print(f"x[{step}]:", x)
-            # Keep track of diffusion process
-            xs.append(x.clone())
-            
-        logit_score /= max_new_tokens
-        return logit_score.item()
 
     def generate_infilling(
         self,
@@ -863,15 +775,15 @@ class GPT2(pl.LightningModule):
             prompt_len = len(prompt_tokens)
             
             # Create input sequence with prompt followed by masks
-            input_ids = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=self.device)
-            input_ids[0, :prompt_len] = torch.tensor(prompt_tokens, dtype=torch.long, device=self.device)
+            input_ids = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
+            input_ids[0, :prompt_len] = torch.tensor(prompt_tokens, dtype=torch.long, device=device)
             
             # Create mask for prediction (only predict masked positions)
-            mask = torch.zeros((B, seq_len), dtype=torch.bool, device=self.device)
+            mask = torch.zeros((B, seq_len), dtype=torch.bool, device=device)
             mask[0, prompt_len:] = True
             
             # Make prediction
-            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(self.device)  # Full attention for testing
+            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(device)  # Full attention for testing
             logits, _ = self.forward(input_ids, input_ids, mask, attn_mask)
             
             # Get prediction probabilities for masked positions
