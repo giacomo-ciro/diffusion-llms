@@ -38,8 +38,11 @@ def main():
     # Load the datamodule
     datamodule = MemmapDataModule(CONFIG_PATH)
 
-    # Instantiate a model
-    model = GPT2(CONFIG_PATH)
+    # Instantiate a model (new or pretrained)
+    if os.path.exists(config["init_from"]):
+        model = GPT2.from_pretrained(config["init_from"])
+    else:
+        model = GPT2(CONFIG_PATH)
 
     # Checkpointers
     if config["enable_checkpointing"]:

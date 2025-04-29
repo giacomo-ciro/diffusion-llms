@@ -1,3 +1,10 @@
+"""
+Stream the FineWeb dataset from HF, find samples with <context_length 
+tokens and save them to a contiguous np.memmap, with appropriate 
+padding so they all have context_length total tokens (of which some are
+true text tokens and others are eos+pad...).
+"""
+
 import time
 import sys
 import os
@@ -32,154 +39,48 @@ print(f"PAD token ID: {pad_token_id}")
 
 # Create a synthetic dataset from openwebtext
 # We'll use existing text as both prompts and answers
-print("Loading OpenWebText dataset...")
 dataset = load_dataset(
-    "openwebtext",
-    split="train",
+    "HuggingFaceFW/fineweb",    
+    "CC-MAIN-2013-20",  
+    split = "train",
     streaming=True,
-).take(SAMPLE_SIZE)
+    trust_remote_code=True,
+).shuffle(
+    buffer_size=10_000,
+    seed = 42,
+).take(SAMPLE_SIZE)  
 
-def create_prompt_answer_pairs(example):
-    """Split a document into prompt and answer pairs"""
-    text = example['text']
-    
-    # Simple heuristic: split at a sentence boundary near the middle
-    split_points = ['. ', '? ', '! ']
-    
-    # Find all potential split points
-    positions = []
-    for sep in split_points:
-        pos = 0
-        while True:
-            pos = text.find(sep, pos + 1)
-            if pos == -1:
-                break
-            positions.append(pos + len(sep) - 1)
-    
-    positions.sort()
-    
-    # Find a split point near the middle
-    if positions:
-        mid_point = len(text) // 2
-        split_idx = min(positions, key=lambda x: abs(x - mid_point))
-        
-        prompt = text[:split_idx + 1]
-        answer = text[split_idx + 1:].strip()
-    else:
-        # Fallback: split in the middle of the text
-        mid_point = len(text) // 2
-        prompt = text[:mid_point]
-        answer = text[mid_point:].strip()
-    
-    return {
-        'prompt': prompt,
-        'answer': answer
-    }
+def process(example):
+    ids = enc.encode_ordinary(example['text'])
+    ids.append(enc.eot_token)
+    out = {'ids': ids, 'len': len(ids)}
+    return out
 
-# Process examples into prompt-answer pairs
-print("Creating prompt-answer pairs...")
-dataset = dataset.map(create_prompt_answer_pairs)
+# Tokenize the dataset
+tokenized = dataset.map(
+    process,
+    remove_columns=['text'],
+)
 
-def process_prompt_answer_pair(example):
-    """Tokenize prompt and answer with EOS and padding"""
-    prompt_tokens = enc.encode_ordinary(example["prompt"])
-    answer_tokens = enc.encode_ordinary(example["answer"])
-    
-    # Calculate maximum content length to ensure padding
-    # Reserve at least 20% of context for padding
-    max_content_length = int(context_length * 0.8)
-    
-    # If combined content is too long, truncate but preserve both prompt and answer
-    combined_content_length = len(prompt_tokens) + len(answer_tokens)
-    if combined_content_length > max_content_length - 1:  # -1 for EOS token
-        # Keep at least 25% of the prompt and 25% of the answer
-        min_prompt_length = max(1, len(prompt_tokens) // 4)
-        min_answer_length = max(1, len(answer_tokens) // 4)
-        
-        # Calculate remaining space after ensuring minimums
-        remaining = max_content_length - 1 - min_prompt_length - min_answer_length
-        
-        # Allocate remaining space proportionally
-        if remaining > 0:
-            prompt_ratio = len(prompt_tokens) / combined_content_length
-            additional_prompt = int(remaining * prompt_ratio)
-            
-            prompt_length = min_prompt_length + additional_prompt
-            answer_length = max_content_length - 1 - prompt_length
-        else:
-            prompt_length = min_prompt_length
-            answer_length = min_answer_length
-    
-
-        # Randomly truncate by 0-10% more to add variety to EOS positions
-        if combined_content_length > 100:  # Only for longer contents
-            random_trunc = np.random.randint(0, int(combined_content_length * 0.1))
-            if len(answer_tokens) > random_trunc + 10:  # Ensure we don't remove too much from answer
-                answer_tokens = answer_tokens[:-random_trunc]
-            
-        prompt_tokens = prompt_tokens[:prompt_length]
-        answer_tokens = answer_tokens[:answer_length]
-    
-    # Create the final sequence with EOS and padding
-    combined = prompt_tokens + answer_tokens + [eos_token_id]
-    
-    # Add padding to reach context_length
-    padding_needed = context_length - len(combined)
-    combined += [pad_token_id] * padding_needed
-    
-    # Keep track of important positions
-    prompt_len = len(prompt_tokens)
-    answer_len = len(answer_tokens)
-    eos_position = prompt_len + answer_len
-    
-    return {
-        'ids': combined, 
-        'len': len(combined),
-        'prompt_len': prompt_len,
-        'answer_len': answer_len,
-        'eos_position': eos_position
-    }
-
-# Tokenize the dataset with prompt+answer+EOS+pad format
-print("Tokenizing prompt-answer pairs...")
-tokenized = dataset.map(process_prompt_answer_pair)
-
-# Verify dataset structure
-print("Verifying dataset structure...")
-eos_count = 0
-pad_count = 0
-correct_structure = 0
-
+# Go through the dataset and store all the samples 
+# shorter than context_length
+print("Counting valid samples...")
+tot_len = 0
+valid_samples = 0
 for sample in tokenized:
-    ids = sample['ids']
-    eos_positions = [i for i, x in enumerate(ids) if x == eos_token_id]
-    pad_positions = [i for i, x in enumerate(ids) if x == pad_token_id]
-    
-    if eos_positions:
-        eos_count += 1
-        if pad_positions and pad_positions[0] == eos_positions[-1] + 1:
-            correct_structure += 1
-            pad_count += 1
+    if sample["len"] < context_length:
+        tot_len += sample["len"]
+        valid_samples += 1
+        # print()
+        # print(enc.decode(sample["ids"]))
 
-print(f"Number of samples with EOS token: {eos_count} out of {SAMPLE_SIZE}")
-print(f"Number of samples with PAD tokens: {pad_count} out of {SAMPLE_SIZE}")
-print(f"Number of samples with correct EOS->PAD structure: {correct_structure} out of {SAMPLE_SIZE}")
-
-if eos_count < SAMPLE_SIZE * 0.9 or correct_structure < SAMPLE_SIZE * 0.9:
-    print("WARNING: Many samples are missing EOS tokens or correct structure. Check the dataset creation process.")
-    if input("Continue anyway? (y/n): ").lower() != 'y':
-        sys.exit()
-
-# Prepare dataset in a format suitable for fixed-length retrieval
-# This is critical: we flatten the dataset but ensure each sample is context_length long
-# This allows the dataloader to efficiently load fixed-size chunks
-full_dataset = []
-for sample in tokenized:
-    full_dataset.extend(sample['ids'])
-
-tot_len = len(full_dataset)
-print(f"Number of Tokens = {tot_len:,}")
-print(f"Expected number based on samples * context_length = {SAMPLE_SIZE * context_length}")
+if valid_samples == 0:
+    print(f"[!] No samples found with context length = {context_length}.")
+    exit()
+print(f"Found {valid_samples} samples out of {SAMPLE_SIZE} with < {context_length} tokens")
+print(f"Number of text tokens in final dataset: {tot_len:,}")
+print(f"Number of total tokens in final dataset: {valid_samples * context_length:,}")
+print(f"Average text tokens per sample: {tot_len / valid_samples:,.2f}")
 
 # Create a memmap array
 def format_file_size(tot_len):
@@ -192,18 +93,32 @@ def format_file_size(tot_len):
     else:
         return f'{tot_len/1e9:.0f}B'
 
-# Use a distinct filename to indicate variable length dataset with improvements
-filename = f'var_len_fixed_{format_file_size(tot_len)}'
+# Create memmap object
+filename = f'var_len_train_{format_file_size(tot_len)}_{context_length}'
+memmap_path = os.path.join(
+    os.path.dirname(__file__),
+    f"{filename}.bin"
+)
+memmap_dtype = np.uint16
 arr = np.memmap(
-    os.path.join(os.path.dirname(__file__), f'{filename}.bin'),
-    dtype=np.uint16,
+    memmap_path,
+    dtype=memmap_dtype,
     mode='w+',
-    shape=(tot_len,)
+    shape=(context_length * valid_samples,)     # blocks of context_length
 )
 
-# Write the entire dataset at once
-arr[:] = np.array(full_dataset, dtype=np.uint16)
-arr.flush()
+# Go through the dataset again and save the tokens with appropriate padding
+idx = 0
+for sample in tokenized:
+
+    if sample["len"] < context_length:
+        assert sample["ids"][-1] == eos_token_id
+        sample_len = sample["len"]
+        sample_padded = sample["ids"] + [pad_token_id] * (context_length - sample_len)
+        arr[idx: idx+context_length] = np.array(sample_padded, dtype=memmap_dtype)
+        idx += context_length
+        arr.flush()
+
 
 # Write metadata file with statistics
 with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
@@ -214,16 +129,30 @@ Using: $ python improved_prepare_var_len.py {SAMPLE_SIZE} {CONFIG_PATH}
 Total number of tokens: {tot_len:,}
 Number of samples: {SAMPLE_SIZE}
 Context length: {context_length}
-Number of samples with EOS token: {eos_count}
-Number of samples with PAD tokens: {pad_count}
-Number of samples with correct EOS->PAD structure: {correct_structure}
-Format: [prompt tokens] [answer tokens] [EOS token={eos_token_id}] [PAD tokens={pad_token_id}]
+Average text length: {tot_len / valid_samples:,.2f}
+EOS token id: {eos_token_id}
+PAD token id: {pad_token_id}
+Format: [text tokens] [{eos_token_id}] [{pad_token_id}, ..., {pad_token_id}]
 """
-    )
+)
 
 print(f"Variable length dataset saved as {filename}.bin")
-print(f"Make sure to update your config.json to use this dataset:")
-print(f"  \"memmap_path\": \"./data/openwebtext/{filename}.bin\",")
-print(f"  \"eos_token_id\": {eos_token_id},")
-print(f"  \"pad_token_id\": {pad_token_id},")
-print(f"  \"variable_length\": true")
+
+# Inspect generate data
+print("Inspecting generated memmap...")
+n = 5
+arr = np.memmap(memmap_path, dtype=memmap_dtype, mode='r')
+
+# Random chunk (multiples of context_len)
+idx = np.random.randint(0, valid_samples, size=(n,), dtype=int) * context_length
+
+# Print the text
+for i in idx:
+    sample = arr[i:i+context_length].tolist()
+    # Decoder does not know pad id, replace with eos just for the sake of printing TODO: custom tokenizer
+    sample = [token if token != pad_token_id else eos_token_id for token in sample]
+    print()
+    print(
+        enc.decode(sample)
+    ) 
+print("Done!")
