@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import lightning as pl
 from torch.utils.data import Dataset, DataLoader
+import sys
 
 class MemmapTokenDataset(Dataset):
     """
@@ -124,7 +125,7 @@ class MemmapDataModule(pl.LightningDataModule):
             )
         else:
             print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
-            exit()
+            sys.exit()
         
         # Split the dataset
         assert self.val_test_tokens < len(self.data)

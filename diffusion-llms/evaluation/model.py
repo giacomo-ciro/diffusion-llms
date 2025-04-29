@@ -1,6 +1,5 @@
 import json
 import math
-import os
 
 import numpy as np
 import torch
@@ -140,7 +139,6 @@ class GPT2(pl.LightningModule):
         assert len(attn_mask.shape) == 4
         non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
-        # self.log("global_step", self.global_step, prog_bar = True)
 
         # Forward pass
         logits = self.gpt2.forward(
@@ -604,7 +602,98 @@ class GPT2(pl.LightningModule):
 
 
 
-   
+
+
+
+    def eval_forward_backup(
+        self,
+        input_ids,
+        src_mask,
+    ):
+
+
+        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
+        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        device = 'cuda'
+        self.eval()
+        input_ids = input_ids.to(device)
+        # Get dimensions
+        B = input_ids.shape[0]
+        assert(B == 1) # just for now
+        seq_len = input_ids.shape[1]
+        
+        # Start with fully masked sequence for the new tokens
+        max_new_tokens = src_mask.shape[1] - torch.sum(src_mask[0]).item()
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
+        
+        # (id, ..., id, msk, ..., msk)
+        # [B, seq_len]
+        x = torch.where(src_mask == 1, input_ids, x)
+        
+        # Number of diffusion steps
+        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
+        
+        # Number of tokens to be denoised at each step
+        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        
+        # Full attention mask for inference
+        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        
+        # To store intermediate steps
+        xs = [x.clone()]
+
+        # Gradually unmask tokens
+        for step in range(num_steps, 0, -1):
+            
+            # Get masked positions
+            mask = (x == self.config["mask_id"])
+
+            # Exit when generation is completed
+            if not torch.any(mask):
+                break
+            
+            # Forward pass to get predictions
+            with torch.no_grad():
+                logits, _ = self.forward(
+                    input_ids=x,
+                    targets=None,
+                    input_mask=None,
+                    attn_mask=attn_mask
+                )
+            
+            # da capire se possono andare sotto zero
+            positional_logits = torch.zeros((B, seq_len), device=device)
+            for i in range(seq_len):
+                if mask[0][i]:
+                    positional_logits[0][i] = (logits[:, i, input_ids[:, i]].item())
+            
+            # print("positional_logits:", positional_logits)
+            
+
+
+            # Get the most confident predictions (lowest entropy)
+            logits_to_denoise, idx_to_denoise = torch.topk(
+                positional_logits,
+                k=n_tokens_per_step,
+                dim=-1,
+                largest=True
+            )
+
+            # Transform indices to mask
+            step_mask = torch.zeros_like(mask)
+            step_mask.scatter_(1, idx_to_denoise, True)
+
+            # Only predict masked tokens with highest confidence
+            mask = mask & step_mask
+            
+            # Update the tokens that were masked
+            x = torch.where(mask, input_ids, x)
+            # print(f"x[{step}]:", x)
+            # Keep track of diffusion process
+            xs.append(x.clone())
+            
+        logit_score /= max_new_tokens
+        return logit_score.item()
 
     def generate_infilling(
         self,
@@ -615,9 +704,10 @@ class GPT2(pl.LightningModule):
     ):
         """
         Generate text using diffusion process.
-        It fills in the masked tokens in the input sequence.
-
-
+        The total number T of diffusion steps is given.
+        At each step, un-mask  1/T % of tokens. 
+        The tokens to be un-masked are the ones with highest confidence (lowest entropy).
+        Conversely, in the DiffuGPT paper they sample 1/T% tokens at random.
         """
 
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
@@ -793,7 +883,7 @@ class GPT2(pl.LightningModule):
             # Check if EOS has highest probability at any position
             predicted_tokens = torch.argmax(logits[0, prompt_len:], dim=-1).cpu().numpy()
             has_eos = eos_token_id in predicted_tokens
-            # eos_pos = np.argmax(eos_probs) if has_eos else -1
+            eos_pos = np.argmax(eos_probs) if has_eos else -1
             
             eos_predictions.append(has_eos)
             eos_confidences.append(np.max(eos_probs))
@@ -807,24 +897,3 @@ class GPT2(pl.LightningModule):
             "avg_eos_confidence": avg_confidence,
             "eos_confidences": eos_confidences
         }
-    
-    @classmethod
-    def from_pretrained(self, path_to_ckpt):
-        """
-        Loads a model from a .ckpt file.
-        It needs the corresponding config.json to live in the same folder.
-        """
-        # Check the config.json exists in the parent dir
-        config_path = os.path.join(
-            os.path.dirname(path_to_ckpt),
-            "config.json"
-        )
-        assert os.path.exists(config_path)
-        
-        # Load the model
-        model = GPT2.load_from_checkpoint(
-            path_to_ckpt,
-            config_path = config_path
-        )
-        print(f"Successfully loaded weights from {path_to_ckpt}")
-        return model
