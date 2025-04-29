@@ -37,10 +37,11 @@
   "run_name": "gpt2-scratch-openwebtext",
   "project_name": "diffusion-llms",
 
-  "user_prompt": "Hello, what's your name?",
+  "user_prompt": "Today is a wonderful day,",
   "n_samples": 1,
-  "temperature": 0.8,
-  "max_new_tokens": 128,
-  "top_k": 40,
-  "diffusion_steps": 64
+  "temperature": 1.0,
+  "max_new_tokens": 10,
+  "top_k": null,
+  "diffusion_steps": 64,
+  "denoising_strategy": "random"
 }
