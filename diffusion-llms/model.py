@@ -1,5 +1,6 @@
 import json
 import math
+import os
 
 import numpy as np
 import torch
@@ -306,7 +307,11 @@ class GPT2(pl.LightningModule):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.Tensor
+        input_ids: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float,
+        top_k: float,
+        denoising_strategy:str="random"
     )->list[torch.Tensor]:
         """
         Samples from the model according to the specified pipeline. 
@@ -318,9 +323,9 @@ class GPT2(pl.LightningModule):
         """
         if self.config["pipeline"] == "arm":
             genconfig = GenerationConfig(
-                max_new_tokens = self.config["max_new_tokens"],
-                temperature=self.config["temperature"],
-                top_k=self.config["top_k"],
+                max_new_tokens = max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
             )
             out = self.gpt2.generate(
                 inputs=input_ids,
@@ -332,10 +337,10 @@ class GPT2(pl.LightningModule):
         elif self.config["pipeline"] == "diffusion":
             xs = self.generate_diffusion(
                 input_ids,
-                max_new_tokens = self.config["max_new_tokens"],
-                temperature=self.config["temperature"],
-                top_k=self.config["top_k"],
-                denoising_strategy=self.config["denoising_strategy"]
+                max_new_tokens = max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
+                denoising_strategy=denoising_strategy
             )
             return xs
         
@@ -544,3 +549,24 @@ class GPT2(pl.LightningModule):
             "avg_eos_confidence": avg_confidence,
             "eos_confidences": eos_confidences
         }
+    
+    @classmethod
+    def from_pretrained(self, path_to_ckpt):
+        """
+        Loads a model from a .ckpt file.
+        It needs the corresponding config.json to live in the same folder.
+        """
+        # Check the config.json exists in the parent dir
+        config_path = os.path.join(
+            os.path.dirname(path_to_ckpt),
+            "config.json"
+        )
+        assert os.path.exists(config_path)
+        
+        # Load the model
+        model = GPT2.load_from_checkpoint(
+            path_to_ckpt,
+            config_path = config_path
+        )
+        print(f"Successfully loaded weights from {path_to_ckpt}")
+        return model

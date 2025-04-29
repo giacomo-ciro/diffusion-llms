@@ -36,10 +36,9 @@ dataset = load_dataset(
     streaming=True,
     trust_remote_code=True,
 ).shuffle(
-    buffer_size=10_000
-).take(SAMPLE_SIZE)     # not random
-# to get random, use .shuffle(buffer_size=10000,  seed=42)
-# larger buffer = better randomization
+    buffer_size=10_000,
+    seed = 42,
+).take(SAMPLE_SIZE)  
 
 # Tokenizer
 enc = tiktoken.get_encoding("gpt2")
