@@ -1,6 +1,6 @@
 Lambada:    tutti:     0.258                (random = 0.000)
 # su tutti questi, la funzione eval_forward è differente
-Hellaswag   primi 100: 0.366                (random = 0.250)
+Hellaswag   primi 100: 0.35                (random = 0.250)
 Wino        primi 100: 0.510                (random = 0.500)
 Piqa        primi 100: 0.540                (random = 0.500)
 Siqa        primi 100: 0.380                (random = 0.333)
