@@ -140,7 +140,7 @@ class GPT2(pl.LightningModule):
         # attribute .logits
         logits = self.gpt2.forward(
             input_ids = input_ids,
-            attention_mask= attn_mask
+            attn_mask = attn_mask
         ).logits
 
         if targets:
@@ -292,10 +292,7 @@ class GPT2(pl.LightningModule):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.Tensor,
-        max_new_tokens: int,
-        temperature:int=1.0,
-        top_k:float=None
+        input_ids: torch.Tensor
     )->list[torch.Tensor]:
         """
         Samples from the model according to the specified pipeline. 
@@ -307,23 +304,24 @@ class GPT2(pl.LightningModule):
         """
         if self.config["pipeline"] == "arm":
             genconfig = GenerationConfig(
-                max_new_tokens = max_new_tokens,
-                temperature=temperature,
-                top_k=top_k
+                max_new_tokens = self.config["max_new_tokens"],
+                temperature=self.config["temperature"],
+                top_k=self.config["top_k"],
             )
             out = self.gpt2.generate(
                 inputs=input_ids,
                 generation_config=genconfig,
-                do_sample=True,
+
             )
             return [out]
         
         elif self.config["pipeline"] == "diffusion":
             xs = self.generate_diffusion(
                 input_ids,
-                max_new_tokens,
-                temperature,
-                top_k
+                max_new_tokens = self.config["max_new_tokens"],
+                temperature=self.config["temperature"],
+                top_k=self.config["top_k"],
+                denoising_strategy=self.config["denoising_strategy"]
             )
             return xs
         
@@ -336,7 +334,8 @@ class GPT2(pl.LightningModule):
         input_ids,
         max_new_tokens,
         temperature,
-        top_k
+        top_k,
+        denoising_strategy:str      # "random", "entropy"
     ):
         """
         Generate text using diffusion process.
@@ -422,32 +421,46 @@ class GPT2(pl.LightningModule):
                  dim=1
             )
 
-            # Compute entropy for each position (along the vocabulary)
-            entropy = -torch.sum(
-                probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
-                axis = -1
-            )
+            # Get indices of tokens to be denoised
+            if denoising_strategy == "random":
+                # Choose n_tokens_per_step at random among the masked ones
+                step_mask = torch.zeros_like(mask).to(torch.bool)
+                for b in range(step_mask.shape[0]):
+                    nonzero = mask[b].nonzero().flatten().numpy()
+                    np.random.permutation(nonzero)
+                    idx = nonzero[:n_tokens_per_step].tolist()
+                    step_mask[b, idx] = True
 
-            # Deal with right shift in the entropy computation
-            # probs at position i refer to (i+1)-th token in the output
-            entropy = torch.cat(
-                [entropy[:, 0:1], entropy[:, :-1]],
-                 dim=1
-            )
-            # Set tokens not to be predicted at +inf
-            entropy[~mask] = torch.inf
+            elif denoising_strategy == "entropy":
+                # Compute entropy for each position (along the vocabulary)
+                entropy = -torch.sum(
+                    probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
+                    axis = -1
+                )
 
-            # Get the most confident predictions (lowest entropy)
-            _, idx_to_denoise = torch.topk(
-                entropy,
-                k=n_tokens_per_step,
-                dim=-1,
-                largest=False
-            )
+                # Deal with right shift in the entropy computation
+                # probs at position i refer to (i+1)-th token in the output
+                entropy = torch.cat(
+                    [entropy[:, 0:1], entropy[:, :-1]],
+                        dim=1
+                )
+                # Set tokens not to be predicted at +inf
+                entropy[~mask] = torch.inf
 
-            # Transform indices to mask
-            step_mask = torch.zeros_like(mask)
-            step_mask.scatter_(1, idx_to_denoise, True)
+                # Get the most confident predictions (lowest entropy)
+                _, idx_to_denoise = torch.topk(
+                    entropy,
+                    k=n_tokens_per_step,
+                    dim=-1,
+                    largest=False
+                )
+
+                # Transform indices to mask
+                step_mask = torch.zeros_like(mask)
+                step_mask.scatter_(1, idx_to_denoise, True)
+            else:
+                print("Denoising strategy must be one of [\"random\", \"entropy\"].")
+                exit()
 
             # Only predict masked tokens with highest confidence
             mask = mask & step_mask
