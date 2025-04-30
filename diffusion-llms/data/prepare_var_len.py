@@ -83,7 +83,7 @@ for sample in pbar:
         valid_samples = f"{valid_samples:,}"
     )
 
-exit()
+#exit()
 if valid_samples == 0:
     print(f"[!] No samples found with context length = {context_length}.")
     exit()
