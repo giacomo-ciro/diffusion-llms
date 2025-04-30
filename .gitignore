@@ -1,8 +1,7 @@
 *.bin
 */lightning_logs/
 */__pycache__/
+*/evaluation/__pycache__/
 */wandb/
-*/local_config.json
-*/local_config_2.json
-*/min_config.json
+*/local_config*
 *.ckpt

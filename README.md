@@ -2,19 +2,19 @@
 
 The authors of the DiffuGPT paper adapted an Autoregressive Language Model (ARM), namely GPT-2, to obtain a Diffusion Language Model (DLM) while leveraging the pre-trained weights with almost no loss in performance. 
 
-However, they did not address the issue of fixed output length which comes with discrete diffusion. In fact, DiffuGPT is only capable of generating output whose length is the full diffusion context size, which is not always the best choice and can also hinder performance in some cases (suppose we want a yes/no answer to a prompt, but the model is forced to generate a 512 tokens output). 
+However, they did not address the issue of fixed output length which comes with discrete diffusion. In fact, DiffuGPT is only capable of generating output whose length is the full diffusion context size, which is not always the best choice and can also hinder performance in some cases. For example, in the case of a yes/no question, the model is forced to generate a full 512 tokens output, even if the answer is only 2 tokens long.
 
-In this project, we aim to further adapt DiffuGPT, making it capable of variable length generation.
+In this project, we aim to further improve DiffuGPT, making it capable of variable length generation.
 
 First, we test an approach similar to the one proposed in the Llada paper: we continue pre-training with a custom dataset of [text + eos + pad], to give DiffuGPT the ability to generate a pad token, allowing it to limit the length of its ouput.
 
-Then, we test how confident our model is in predicting the EoS token at the first step of the diffusion generation, which is fundamental to avoid computing all the subsequent pad tokens and save computations.
+Then, we test how confident our model is in predicting the EoS token at the first step of the diffusion generation, which is fundamental to avoid computing all the subsequent pad tokens.
 
 Finally, we propose a method to improve the model capacity of predicting the EoS token: fine-tuning on [text + mask + EoS + mask] examples to improve the model's accuracy in predicting the eos token at the first diffusion step by only looking at the provided context.
 
 ## TO-DO's
 - [ ] Check correctness of `prepare_var_len.py` script (generate dataset of sequences of text + eos + pad. The length of the sequences is the same thanks to the pad token, but the underlying content has variable length)
-- [ ] Check correctness of the implmenetation in `model.py` (correct masking, correct loss computation, correct shifting etc)
+- [ ] Check correctness of the implementation in `model.py` (correct masking, correct loss computation, correct shifting etc)
 - [ ] Further pre-train DiffuGPT on the var len dataset
 - [ ] Create `eval.py` script to measure performance on benchmarks (the ones used in DiffuGPT paper, can copy from evaluation script on their github)
 - [ ] Train of dataset of text + mask + eos + mask (to improve eos accuracy)
@@ -74,14 +74,17 @@ $ python
 ```bash
 ├── diffusion-llms/ 
 │   ├── checkpoints/        # Checkpoint files for model weights
-│   ├── data/openwebtext/ 
+│   ├── data/openwebtext_local/
 │       ├── prepare.py      # Script for tokenizing and preparing dataset
-│       ├── train_1M.bin
+│       ├── prepare_var_len.py 
 │       ├── train_1M.txt
 │       └── etc.
+│   ├── evaluation/    
+│       ├── eval.py
+│       ├── test_performances.py
+│       └── etc.            # Duplicate scripts to be removed (after check)
 │   ├── attention_patch.py
 │   ├── config.json         # Default configuration file
-│   ├── configurator.py     # Configuration utilities
 │   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
 │   ├── gpt2.py             # Core GPT-2 model architecture
 │   ├── main.ipynb          # only for testing, ignore
