@@ -172,7 +172,6 @@ class GPT2(pl.LightningModule):
         # Logging
         # Store the percentage of the non_zero entries in the mask
         assert len(attn_mask.shape) == 4
-        attn_mask = torch.zeros_like(attn_mask)
         non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
         # self.log("global_step", self.global_step, prog_bar = True)
