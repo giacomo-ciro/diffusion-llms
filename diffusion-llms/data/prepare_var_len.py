@@ -1,5 +1,5 @@
 """
-Stream the FineWeb dataset from HF, find samples with <context_length 
+Stream the FineWeb dataset from HF, find samples with context_length 
 tokens and save them to a contiguous np.memmap, with appropriate 
 padding so they all have context_length total tokens (of which some are
 true text tokens and others are eos+pad...).
@@ -9,6 +9,7 @@ import time
 import sys
 import os
 import json
+from tqdm import tqdm
 import numpy as np
 import tiktoken
 from datasets import load_dataset
@@ -17,6 +18,7 @@ from datasets import load_dataset
 if len(sys.argv) >= 3:
     SAMPLE_SIZE = int(sys.argv[1])
     CONFIG_PATH = sys.argv[2]
+    n = 3       # how many samples to inspect at the end
 else:
     print("Usage: python prepare_var_len.py <SAMPLE_SIZE> <CONFIG_PATH>")
     print("Example: python prepare_var_len.py 1000 ../config.json")
@@ -32,7 +34,7 @@ eos_token_id = enc.eot_token  # Usually 50256 for GPT-2
 pad_token_id = config.get("pad_token_id", 50257)  # Use a specific pad token if defined
 context_length = config.get("context_length", 256)
 
-print(f"Using context_length: {context_length}")
+print(f"context_length: {context_length}")
 print(f"EOS token ID: {eos_token_id}")
 print(f"PAD token ID: {pad_token_id}")
 
@@ -40,14 +42,15 @@ print(f"PAD token ID: {pad_token_id}")
 # We'll use existing text as both prompts and answers
 dataset = load_dataset(
     "HuggingFaceFW/fineweb",    
-    "CC-MAIN-2013-20",  
+    # "CC-MAIN-2013-20",  
     split = "train",
     streaming=True,
     trust_remote_code=True,
 ).shuffle(
     buffer_size=10_000,
     seed = 42,
-).take(SAMPLE_SIZE)  
+)
+# ).take(SAMPLE_SIZE)  
 
 def process(example):
     ids = enc.encode_ordinary(example['text'])
@@ -66,17 +69,25 @@ tokenized = dataset.map(
 print("Counting valid samples...")
 tot_len = 0
 valid_samples = 0
-for sample in tokenized:
+checked_samples = 0
+pbar = tqdm(tokenized, desc = "Counting valid samples", unit="samples")
+for sample in pbar:
+    checked_samples += 1
     if sample["len"] < context_length:
         tot_len += sample["len"]
         valid_samples += 1
-        # print()
-        # print(enc.decode(sample["ids"]))
+        if valid_samples == SAMPLE_SIZE:
+            break
+    # Update progress bar
+    pbar.set_postfix(
+        valid_samples = f"{valid_samples:,}"
+    )
 
+exit()
 if valid_samples == 0:
     print(f"[!] No samples found with context length = {context_length}.")
     exit()
-print(f"Found {valid_samples} samples out of {SAMPLE_SIZE} with < {context_length} tokens")
+print(f"Found {valid_samples} samples out of {checked_samples} with < {context_length} tokens")
 print(f"Number of text tokens in final dataset: {tot_len:,}")
 print(f"Number of total tokens in final dataset: {valid_samples * context_length:,}")
 print(f"Average text tokens per sample: {tot_len / valid_samples:,.2f}")
@@ -108,7 +119,9 @@ arr = np.memmap(
 
 # Go through the dataset again and save the tokens with appropriate padding
 idx = 0
-for sample in tokenized:
+valid_samples = 0
+pbar = tqdm(tokenized, desc = "Saving valid samples", unit="samples")
+for sample in pbar:
 
     if sample["len"] < context_length:
         assert sample["ids"][-1] == eos_token_id
@@ -117,6 +130,17 @@ for sample in tokenized:
         arr[idx: idx+context_length] = np.array(sample_padded, dtype=memmap_dtype)
         idx += context_length
         arr.flush()
+
+        # Stop when enough samples found
+        valid_samples += 1
+        if valid_samples == SAMPLE_SIZE:
+            break
+        
+        # Update progress bar
+        pbar.set_postfix(
+            valid_samples = f"{valid_samples:,}"
+        )
+
 
 
 # Write metadata file with statistics
@@ -137,9 +161,8 @@ Format: [text tokens] [{eos_token_id}] [{pad_token_id}, ..., {pad_token_id}]
 
 print(f"Variable length dataset saved as {filename}.bin")
 
-# Inspect generate data
+# Inspect generated data
 print("Inspecting generated memmap...")
-n = 5
 arr = np.memmap(memmap_path, dtype=memmap_dtype, mode='r')
 
 # Random chunk (multiples of context_len)
