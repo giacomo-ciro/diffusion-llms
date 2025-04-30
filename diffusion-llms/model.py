@@ -61,6 +61,7 @@ class GPT2(pl.LightningModule):
             2. Download DiffuGPT weights from HF
             3. Rename accordingly
             4. Load the weights and check match (wte & lm_head are tied)
+            5. Add a new row in the embedding matrix
         """
         from huggingface_hub import hf_hub_download
         from safetensors.torch import load_file
@@ -101,9 +102,42 @@ class GPT2(pl.LightningModule):
         # Checks
         wte_after = self.gpt2.lm_head.weight.clone()
         lm_head_after = self.gpt2.transformer.wte.weight.clone()
-        assert not torch.all(wte_before == wte_after)
-        assert not torch.all(lm_head_before == lm_head_after)
-        assert torch.all(wte_after == lm_head_after)
+        assert not torch.allclose(wte_before, wte_after)
+        assert not torch.allclose(lm_head_before, lm_head_after)
+        assert torch.allclose(wte_after, lm_head_after)
+
+        # Create new wte & lm_head with additional token
+        assert self.config["pad_token_id"] == 50257
+        old_wte = self.gpt2.transformer.wte
+        new_wte = torch.nn.Embedding(
+            old_wte.weight.shape[0]+1,
+            old_wte.weight.shape[1]
+        )
+        old_lm_head = self.gpt2.lm_head
+        new_lm_head = torch.nn.Linear(
+            in_features=old_lm_head.in_features,
+            out_features=old_lm_head.out_features+1,
+            bias=False
+        ) 
+        # Copy the old weights, init new to the mean
+        with torch.no_grad():
+            new_wte.weight[:-1] = old_wte.weight
+            new_wte.weight[-1] = torch.mean(old_wte.weight, axis = 0)
+            # # Copy weights to the new lm_head
+            # new_lm_head.weight[:-1] = old_lm_head.weight
+            # new_lm_head.weight[-1] = torch.mean(old_lm_head.weight, axis=0)
+        
+        # Assign to the model
+        self.gpt2.transformer.wte = new_wte
+        self.gpt2.lm_head = new_lm_head
+
+        # Tie the weights
+        self.gpt2.lm_head.weight = self.gpt2.transformer.wte.weight
+
+        # Clear old
+        del old_wte
+        del old_lm_head
+        torch.cuda.empty_cache()  # If using GPU
 
     def init_gpt2(
             self,
@@ -138,6 +172,7 @@ class GPT2(pl.LightningModule):
         # Logging
         # Store the percentage of the non_zero entries in the mask
         assert len(attn_mask.shape) == 4
+        attn_mask = torch.zeros_like(attn_mask)
         non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
         # self.log("global_step", self.global_step, prog_bar = True)
