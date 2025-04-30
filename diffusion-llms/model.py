@@ -52,6 +52,10 @@ class GPT2(pl.LightningModule):
                 1,
                 self.config["attn_annealing_steps"]
             )
+        
+        if self.config["pad_token_id"]:
+            assert self.config["pad_token_id"] == 50257
+            self.extend_vocab()
     
 
     def init_diffugpt(self):
@@ -106,8 +110,33 @@ class GPT2(pl.LightningModule):
         assert not torch.allclose(lm_head_before, lm_head_after)
         assert torch.allclose(wte_after, lm_head_after)
 
+    def init_gpt2(
+            self,
+            pretrained: str=None,
+        ):
+        """
+        Init a gpt2 model from scratch or from HF checkpoint.
+        """
+
+        if pretrained:
+            assert pretrained in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
+            self.gpt2 = GPT2LMHeadModel.from_pretrained(
+                pretrained_model_name_or_path = pretrained
+            )
+        else:
+            gptconfig = GPT2Config(
+                n_positions=self.config["context_length"],
+                n_embd=self.config["n_embd"],
+                n_layer=self.config["n_layer"],
+                n_head=self.config["n_head"],
+            )
+            self.gpt2 = GPT2LMHeadModel(gptconfig)
+
+    def extend_vocab(self):
+        """
+        Adapts the wte and lm_head to handle an additional token with id=50257
+        """
         # Create new wte & lm_head with additional token
-        assert self.config["pad_token_id"] == 50257
         old_wte = self.gpt2.transformer.wte
         new_wte = torch.nn.Embedding(
             old_wte.weight.shape[0]+1,
@@ -138,29 +167,7 @@ class GPT2(pl.LightningModule):
         del old_wte
         del old_lm_head
         torch.cuda.empty_cache()  # If using GPU
-
-    def init_gpt2(
-            self,
-            pretrained: str=None,
-        ):
-        """
-        Init a gpt2 model from scratch or from HF checkpoint.
-        """
-
-        if pretrained:
-            assert pretrained in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
-            self.gpt2 = GPT2LMHeadModel.from_pretrained(
-                pretrained_model_name_or_path = pretrained
-            )
-        else:
-            gptconfig = GPT2Config(
-                n_positions=self.config["context_length"],
-                n_embd=self.config["n_embd"],
-                n_layer=self.config["n_layer"],
-                n_head=self.config["n_head"],
-            )
-            self.gpt2 = GPT2LMHeadModel(gptconfig)
-
+    
     def forward(
         self,
         input_ids:torch.Tensor,
@@ -216,7 +223,7 @@ class GPT2(pl.LightningModule):
         B, context_length = input_ids.shape
         if self.config["pipeline"] == "diffusion":
             # Current annealing step (% of upper tril to be unmasked)
-            if self.global_step < len(self.annealing_schedule):
+            if self.global_step < self.config["attn_annealing_steps"]:
                 p = self.annealing_schedule[self.global_step]
             else:
                 p = 1.0
