@@ -307,7 +307,15 @@ class GPT2(pl.LightningModule):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.Tensor
+        input_ids: torch.Tensor,
+        pipeline: str,              # "diffusion" / "arm"
+        max_new_tokens: int,
+        temperature: float,
+        top_k: int,
+        do_sample: bool,
+        repetition_penalty: float,
+        denoising_strategy: str,    # "random" / "entropy"
+        diffusion_steps: int
     )->list[torch.Tensor]:
         """
         Samples from the model according to the specified pipeline. 
@@ -317,29 +325,29 @@ class GPT2(pl.LightningModule):
         stage of the diffusion process.
         When pipeline is arm, the list has length 1.
         """
-        if self.config["pipeline"] == "arm":
+        if pipeline == "arm":
             genconfig = GenerationConfig(
-                max_new_tokens = self.config["max_new_tokens"],
-                temperature=self.config["temperature"],
-                top_k=self.config["top_k"],
+                max_new_tokens = max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
             )
             
             out = self.gpt2.generate(
                 inputs=input_ids,
                 generation_config=genconfig,
-                do_sample=self.config["do_sample"],
-                repetition_penalty= self.config["repetition_penalty"],
-
+                do_sample=do_sample,
+                repetition_penalty= repetition_penalty,
             )
             return [out]
         
-        elif self.config["pipeline"] == "diffusion":
+        elif pipeline == "diffusion":
             xs = self.generate_diffusion(
                 input_ids,
-                max_new_tokens = self.config["max_new_tokens"],
-                temperature=self.config["temperature"],
-                top_k=self.config["top_k"],
-                denoising_strategy=self.config["denoising_strategy"]
+                max_new_tokens = max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
+                denoising_strategy=denoising_strategy,
+                diffusion_steps = diffusion_steps
             )
             return xs
         
@@ -353,7 +361,8 @@ class GPT2(pl.LightningModule):
         max_new_tokens,
         temperature,
         top_k,
-        denoising_strategy:str      # "random", "entropy"
+        denoising_strategy:str,      # "random", "entropy"
+        diffusion_steps: int,
     ):
         """
         Generate text using diffusion process.
@@ -382,11 +391,8 @@ class GPT2(pl.LightningModule):
         # [B, seq_len]
         x[:, :prompt_len] = input_ids
         
-        # Number of diffusion steps
-        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
-        
         # Number of tokens to be denoised at each step
-        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        n_tokens_per_step = math.ceil(1 / diffusion_steps * max_new_tokens)
         
         # Full attention mask for inference
         attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
@@ -395,7 +401,7 @@ class GPT2(pl.LightningModule):
         xs = [x.clone()]
 
         # Gradually unmask tokens
-        for step in range(num_steps, 0, -1):
+        for step in range(diffusion_steps, 0, -1):
             
             # Get masked positions
             mask = (x == self.config["mask_id"])
