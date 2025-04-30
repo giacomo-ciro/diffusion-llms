@@ -2,6 +2,7 @@
 */lightning_logs/
 */__pycache__/
 */evaluation/__pycache__/
+*/evaluation/local_config*
 */wandb/
 */local_config*
 *.ckpt
