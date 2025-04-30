@@ -13,13 +13,13 @@ class MemmapTokenDataset(Dataset):
     When accessed using __getitem__(self, idx), returns a batch of (X, y)
         X (tensor): a sequence of len context_length starting at idx
         y (tensor): the same sequence shifted by 1
+    if strided_context == True, it only returns whole samples (that is, stride == context_length)
     """
     def __init__(
             self,
             memmap_path,
             context_length,
             is_diffusion_training: bool = False,
-            variable_length: bool = False,  
             eos_token_id: int = None,      
             pad_token_id: int = None,     
         ):
@@ -27,13 +27,14 @@ class MemmapTokenDataset(Dataset):
         self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
         self.context_length = context_length
         self.is_diffusion_training = is_diffusion_training
+        self.stride = context_length if self.is_diffusion_training else 1
         
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
-        self.effective_length = max(0, (len(self.data) - (context_length + 1)) + 1)
+        total_positions = max(0, len(self.data) - (context_length + 1) + 1)
+        self.effective_length = (total_positions + self.stride - 1) // self.stride
         
         # Setup for variable length generation
-        self.variable_length = variable_length
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         
@@ -42,8 +43,11 @@ class MemmapTokenDataset(Dataset):
     
     def __getitem__(self, idx):
         if idx >= self.effective_length:
-            raise IndexError(f"Index {idx} out of bounds for dataset with {self.effective_length} samples")
+            raise IndexError(f"Index {idx} out of bounds for dataset with {self.effective_length} samples.")
         
+        # Get the correct idx in the memmap object
+        idx = idx * self.stride
+
         # Get sequence of indices
         # of shape (context_length,)
         X = self.data[idx:idx + self.context_length].copy()
@@ -52,7 +56,7 @@ class MemmapTokenDataset(Dataset):
         # of shape (context_length,)
         y = self.data[idx+1:idx + self.context_length+1].copy()
         
-        # If autoregressive training, return X,y
+        # If autoregressive training, all the tokens are predicted (with masked attn)
         mask = torch.ones((X.shape[0],)).to(torch.bool)
 
         # If diffusion, compute the mask
@@ -64,25 +68,7 @@ class MemmapTokenDataset(Dataset):
                 size=(y.shape[0],), 
                 dtype=torch.float32
             ) < t
-
-        # Variable length handling - need to convert numpy array to tensor first
-        if self.variable_length and self.eos_token_id is not None:
-            # Convert numpy array to torch tensor for eos detection
-            y_tensor = torch.from_numpy(y)
-            
-            # Find first EOS token in the sequence (if any)
-            eos_indices = (y_tensor == self.eos_token_id).nonzero(as_tuple=True)[0]
-            if len(eos_indices) > 0:
-                # Everything after the first EOS should be padded in loss calculation
-                eos_idx = eos_indices[0].item()
-                # Create special mask that only considers tokens up to EOS
-                content_mask = torch.zeros_like(mask, dtype=torch.bool)
-                content_mask[:eos_idx+1] = True
-                # Combine with the diffusion mask
-                if self.is_diffusion_training:
-                    mask = mask & content_mask
-                else:
-                    mask = content_mask
+            # TODO: always mask <eos>?
 
         # Cast to correct type
         X = torch.from_numpy(X).to(torch.int64)
@@ -107,9 +93,8 @@ class MemmapDataModule(pl.LightningDataModule):
         
         self.memmap_path = self.config["memmap_path"]
         self.context_length = self.config["context_length"]
-        self.mask_ratio = self.config["mask_ratio"]
         self.batch_size = self.config["batch_size"]
-        self.val_test_tokens = self.config["val_test_tokens"]
+        self.val_test_perc = self.config["val_test_perc"]
         self.num_workers = 2
     
     def setup(self, stage=None):
@@ -119,7 +104,6 @@ class MemmapDataModule(pl.LightningDataModule):
                 self.memmap_path, 
                 self.context_length,
                 is_diffusion_training=self.config["pipeline"] == "diffusion",
-                variable_length=self.config.get("variable_length", False),
                 eos_token_id=self.config.get("eos_token_id", None),
                 pad_token_id=self.config.get("pad_token_id", None)
             )
@@ -128,11 +112,10 @@ class MemmapDataModule(pl.LightningDataModule):
             sys.exit()
         
         # Split the dataset
-        assert self.val_test_tokens < len(self.data)
+        assert self.val_test_perc < 1.0
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
             self.data,
-            # Use the given number for test and val, rest for token
-            [len(self.data) - 2*self.val_test_tokens, self.val_test_tokens, self.val_test_tokens]
+            [1.0 - 2*self.val_test_perc, self.val_test_perc, self.val_test_perc]
         )
     
     def train_dataloader(self):
