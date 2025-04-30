@@ -46,7 +46,7 @@ class GPT2(pl.LightningModule):
         # At each step i, the entries in the attention mask 
         # will be un-masked with probability annealing_schedule[i]
         # at the last annealing step, all entries will be unmasked
-        if self.config["pipeline"] == "diffusion":
+        if self.config["pipeline"] == "diffusion" and self.config["attn_annealing_steps"] > 0:
             self.annealing_schedule = np.linspace(
                 0,
                 1,
