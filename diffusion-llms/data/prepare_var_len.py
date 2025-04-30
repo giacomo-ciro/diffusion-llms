@@ -76,14 +76,17 @@ for sample in pbar:
     if sample["len"] < context_length:
         tot_len += sample["len"]
         valid_samples += 1
-        if valid_samples == SAMPLE_SIZE:
-            break
+
     # Update progress bar
     pbar.set_postfix(
         valid_samples = f"{valid_samples:,}"
     )
 
-exit()
+    # Stop when we have enough samples
+    if valid_samples == SAMPLE_SIZE:
+        break
+
+# Print some information about the first sweep
 if valid_samples == 0:
     print(f"[!] No samples found with context length = {context_length}.")
     exit()
@@ -92,7 +95,7 @@ print(f"Number of text tokens in final dataset: {tot_len:,}")
 print(f"Number of total tokens in final dataset: {valid_samples * context_length:,}")
 print(f"Average text tokens per sample: {tot_len / valid_samples:,.2f}")
 
-# Create a memmap array
+# Format the name of the memmap file
 def format_file_size(tot_len):
     if tot_len < 1000:
         return f'{tot_len:.0f}'
@@ -102,14 +105,14 @@ def format_file_size(tot_len):
         return f'{tot_len/1e6:.0f}M'
     else:
         return f'{tot_len/1e9:.0f}B'
-
-# Create memmap object
 filename = f'var_len_train_{format_file_size(tot_len)}_{context_length}'
 memmap_path = os.path.join(
     os.path.dirname(__file__),
     f"{filename}.bin"
 )
 memmap_dtype = np.uint16
+
+# Create memmap object
 arr = np.memmap(
     memmap_path,
     dtype=memmap_dtype,
@@ -133,15 +136,15 @@ for sample in pbar:
 
         # Stop when enough samples found
         valid_samples += 1
-        if valid_samples == SAMPLE_SIZE:
-            break
-        
-        # Update progress bar
-        pbar.set_postfix(
-            valid_samples = f"{valid_samples:,}"
-        )
+    
+    # Update progress bar
+    pbar.set_postfix(
+        valid_samples = f"{valid_samples:,}"
+    )
 
-
+    # Stop when reached enough
+    if valid_samples == SAMPLE_SIZE:
+        break
 
 # Write metadata file with statistics
 with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
