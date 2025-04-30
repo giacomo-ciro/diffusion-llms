@@ -9,7 +9,6 @@ import time
 import sys
 import os
 import json
-from tqdm import tqdm
 import numpy as np
 import tiktoken
 from datasets import load_dataset
