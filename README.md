@@ -16,9 +16,15 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 - [ ] Check correctness of `prepare_var_len.py` script (generate dataset of sequences of text + eos + pad. The length of the sequences is the same thanks to the pad token, but the underlying content has variable length)
 - [ ] Check correctness of the implementation in `model.py` (correct masking, correct loss computation, correct shifting etc)
 - [ ] Further pre-train DiffuGPT on the var len dataset
-- [ ] Create `eval.py` script to measure performance on benchmarks (the ones used in DiffuGPT paper, can copy from evaluation script on their github)
+- [x] Create `eval.py` script to measure performance on benchmarks (the ones used in DiffuGPT paper, can copy from evaluation script on their github)
 - [ ] Train of dataset of text + mask + eos + mask (to improve eos accuracy)
-- [ ] Measure eos accuracy (does it actually improve?)
+
+### Sync 30/04/25
+- [ ] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
+    - otherwise, we mask and unmask tokens until model predicts where the eos token is
+    - observation: if the model is able to predict some mask tokens, it is likely to predict the eos token as well
+- [ ] Define a method to evaluate our specific task (e.g. how to measure the performance of the model in predicting the eos token at the first step of the diffusion process)
+- [ ] Complete `check_config_validity` in `utils.py`
 
 ### Feedback from Professor
 - ambition is good, doability is the question
