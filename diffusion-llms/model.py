@@ -491,10 +491,6 @@ class GPT2(pl.LightningModule):
             
         return xs
 
-
-
-
-
     def eval_forward(
         self,
         input_ids,
@@ -504,8 +500,6 @@ class GPT2(pl.LightningModule):
         Evaluate a sentence using the model. In this case the originally masked tokens are at the end of the sentence.
         Returns perplexity (lower is better)
         """
-
-
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
         assert input_ids[0,0] == 50256  # <|endoftext|> token
         device = "cuda"
@@ -602,10 +596,6 @@ class GPT2(pl.LightningModule):
         perplexity = torch.exp(-torch.mean(torch.log(valid_probas)))
         return perplexity.item()
 
-
-
-   
-
     def generate_infilling(
         self,
         input_ids,
@@ -616,8 +606,6 @@ class GPT2(pl.LightningModule):
         """
         Generate text using diffusion process.
         It fills in the masked tokens in the input sequence.
-
-
         """
 
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
@@ -748,7 +736,6 @@ class GPT2(pl.LightningModule):
             xs.append(x.clone())
             
         return xs[-1]
-
 
     def test_eos_prediction(self, prompt_tokens, eos_token_id, pad_token_id, num_samples=100):
         """

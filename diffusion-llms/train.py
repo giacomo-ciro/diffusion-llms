@@ -57,7 +57,7 @@ def main():
         checkpointer = ModelCheckpoint(
             dirpath=dirpath,  # Directory to save checkpoints
             filename='epoch_{epoch}_ce_{valid/loss:.2f}',            # Checkpoint filename format
-            save_top_k=-1,                                                          # Save the 3 best models
+            save_top_k=3,                                                          # Save the 3 best models
             monitor='valid/loss',                                                     # Metric to monitor
             mode='min',                                                             # Mode ('min' for loss, 'max' for accuracy)
             auto_insert_metric_name=False,
