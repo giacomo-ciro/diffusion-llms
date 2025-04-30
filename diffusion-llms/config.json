@@ -2,6 +2,8 @@
   "pipeline": "diffusion",
   "attn_annealing_steps": 1000,
   "mask_id": 10541,
+  "eos_token_id": 50256,
+  "pad_token_id": 50257,
   
   "init_from":"diffugpt",
   "resume_training":false,
