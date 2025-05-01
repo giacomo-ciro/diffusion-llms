@@ -22,13 +22,16 @@ class MemmapTokenDataset(Dataset):
             is_diffusion_training: bool = False,
             is_padded_dataset: bool = False,
             eos_token_id: int = None,      
-            pad_token_id: int = None,     
+            pad_token_id: int = None,
+            pad_masked_perc: float=0.5,     
         ):
 
         self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
         self.context_length = context_length
         self.is_diffusion_training = is_diffusion_training
+        self.is_padded_dataset = is_padded_dataset
         self.stride = context_length if is_padded_dataset else 1
+        self.pad_masked_perc = pad_masked_perc
         
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
@@ -62,14 +65,47 @@ class MemmapTokenDataset(Dataset):
 
         # If diffusion, compute the mask
         if self.is_diffusion_training:
-            # TODO: if predicting pad token make sure to have a balanced mask
             # Random mask for the output sequence
             # of shape # (context_length,)
             t = torch.rand(1).item()
-            mask = torch.rand(
-                size=(y.shape[0],), 
-                dtype=torch.float32
-            ) < t
+
+            # if predicting pad token, make sure to have a balanced mask
+            if self.is_padded_dataset:
+                
+                # Compute what fraction of masked tokens should be pad / nonpad
+                t_pad = t * self.pad_masked_perc
+                t_nonpad = t * (1-self.pad_masked_perc)
+                
+                # Get the number
+                num_pad = int(t_pad * X.shape[0])
+                num_nonpad = int(t_nonpad * X.shape[0])
+                
+                # Get ids in the X tensor
+                pad_ids = np.where(X == self.pad_token_id)[0]
+                nonpad_ids = np.where(X != self.pad_token_id)[0]
+
+                # Randomly pick
+                np.random.shuffle(pad_ids)
+                np.random.shuffle(nonpad_ids)
+
+                # Invert the mask (now all non-masked)
+                mask = ~mask
+        
+                # Select tokens to mask based on pad/nonpad proportions
+                if len(pad_ids) > 0 and num_pad > 0:
+                    selected_pad_ids = pad_ids[:num_pad]
+                    mask[selected_pad_ids] = True
+                    
+                if len(nonpad_ids) > 0 and num_nonpad > 0:
+                    selected_nonpad_ids = nonpad_ids[:num_nonpad]
+                    mask[selected_nonpad_ids] = True
+            else:
+                # Randomly sample the masked ones
+                mask = torch.rand(
+                    size=(y.shape[0],), 
+                    dtype=torch.float32
+                ) < t
+
             # make sure at least one is masked
             if not torch.any(mask):
                 idx = torch.randint(0, mask.shape[0], size=(1,)).item()
@@ -110,8 +146,9 @@ class MemmapDataModule(pl.LightningDataModule):
                 self.context_length,
                 is_diffusion_training=self.config["pipeline"] == "diffusion",
                 is_padded_dataset= self.config["padded_dataset"],
-                eos_token_id=self.config.get("eos_token_id", None),
-                pad_token_id=self.config.get("pad_token_id", None)
+                eos_token_id=self.config["eos_token_id"],
+                pad_token_id=self.config["pad_token_id"],
+                pad_masked_perc=self.config["pad_masked_perc"]
             )
         else:
             print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
