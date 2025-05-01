@@ -12,7 +12,13 @@ from utils import get_annealing_mask, get_causal_mask
 
 # Modify the HF implementation so 
 # the attention mask provided is actually used
-replace_attention_mask()
+# JACK: manually inspected the call tree and 
+# printed all intermediate attention mask,
+# confirmed that without using this patch 
+# the provided attention mask is not considered
+# --> calling this function is necessary
+# to enable custom attention masks !
+replace_attention_mask()   
 
 class GPT2(pl.LightningModule):
     """
@@ -173,20 +179,29 @@ class GPT2(pl.LightningModule):
         input_ids:torch.Tensor,
         targets:torch.Tensor,
         input_mask:torch.Tensor,
-        attn_mask:torch.Tensor
+        attention_mask:torch.Tensor      # [B, 1, context_length, context_length]    to be broadcasted to keys, querys, values
     ) -> tuple:
         
         # Logging
         # Store the percentage of the non_zero entries in the mask
-        assert len(attn_mask.shape) == 4
-        non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
+        assert len(attention_mask.shape) == 4
+        non_zero_mask = attention_mask.sum().item() / attention_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
         # self.log("global_step", self.global_step, prog_bar = True)
-
+        
+        # Ensure correct device & type
+        # Always requried
+        input_ids = input_ids.cpu().to(torch.int64).to(self.device)     # (B, context_length)
+        attention_mask = attention_mask.to(self.device)                 # (B, 1, context_length, context_length)    
+        # Not needed at inference
+        if targets is not None:
+            targets = targets.cpu().to(torch.int64).to(self.device)     # (B, context_length)
+            input_mask = input_mask.to(self.device)                     # (B, context_length)
+        
         # Forward pass
         logits = self.gpt2.forward(
             input_ids = input_ids,
-            attn_mask = attn_mask
+            attention_mask = attention_mask
         ).logits
 
         # If targets provided, compute loss
@@ -216,8 +231,6 @@ class GPT2(pl.LightningModule):
         
         # Read in batch
         input_ids, targets, input_mask = batch        
-        input_ids = input_ids.cpu().to(torch.int64).to(self.device) # (B, context_length)
-        targets = targets.cpu().to(torch.int64).to(self.device) # (B, context_length)
 
         # Prepare the attention mask:
         B, context_length = input_ids.shape
@@ -227,17 +240,16 @@ class GPT2(pl.LightningModule):
                 p = self.annealing_schedule[self.global_step]
             else:
                 p = 1.0
-            attn_mask = get_annealing_mask(context_length, B, p)
+            attention_mask = get_annealing_mask(context_length, B, p)
         else:
-            attn_mask = get_causal_mask(B, context_length)
-        attn_mask = attn_mask.to(input_ids.device)
+            attention_mask = get_causal_mask(B, context_length)
 
         # Forward pass
         logits, loss = self.forward(
-            input_ids,
-            targets,
-            input_mask,
-            attn_mask
+            input_ids = input_ids,
+            targets = targets,
+            input_mask = input_mask,
+            attention_mask = attention_mask
         )
         
         # Logging
@@ -248,13 +260,13 @@ class GPT2(pl.LightningModule):
             on_epoch=False,
             prog_bar=True
         )
-        self.log(
-            "train/learning_rate",
-            self.optimizers().param_groups[0]['lr'],
-            on_step=True,
-            on_epoch=False,
-            prog_bar=True
-        )
+        # self.log(
+        #     "train/learning_rate",
+        #     self.optimizers().param_groups[0]['lr'],
+        #     on_step=True,
+        #     on_epoch=False,
+        #     prog_bar=True
+        # )
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -267,17 +279,16 @@ class GPT2(pl.LightningModule):
         B, context_length = input_ids.shape
         if self.config["pipeline"] == "diffusion":
             # can see everything at validation
-            attn_mask = get_annealing_mask(context_length, B, 1.0)
+            attention_mask = get_annealing_mask(context_length, B, 1.0)
         else:
-            attn_mask = get_causal_mask(context_length, B)
-        attn_mask = attn_mask.to(input_ids.device)
+            attention_mask = get_causal_mask(context_length, B)
         
         # Forward pass
         logits, loss = self.forward(
             input_ids,
             targets,
             input_mask,
-            attn_mask
+            attention_mask
         )
         
         # Logging
@@ -436,7 +447,7 @@ class GPT2(pl.LightningModule):
         n_tokens_per_step = math.ceil(1 / diffusion_steps * max_new_tokens)
         
         # Full attention mask for inference
-        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        attention_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
         
         # To store intermediate steps
         xs = [x.clone()]
@@ -457,7 +468,7 @@ class GPT2(pl.LightningModule):
                     input_ids=x,
                     targets=None,
                     input_mask=None,
-                    attn_mask=attn_mask
+                    attention_mask=attention_mask
                 )
             
             # Apply temperature and optional top-k sampling
@@ -572,7 +583,7 @@ class GPT2(pl.LightningModule):
         n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
         
         # Full attention mask for inference
-        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        attention_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
         
         # To store intermediate steps
         xs = [x.clone()]
@@ -596,7 +607,7 @@ class GPT2(pl.LightningModule):
                     input_ids=x,
                     targets=None,
                     input_mask=None,
-                    attn_mask=attn_mask
+                    attention_mask=attention_mask
                 )
             
             # da capire se possono andare sotto zero
@@ -680,7 +691,7 @@ class GPT2(pl.LightningModule):
         n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
         
         # Full attention mask for inference
-        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        attention_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
         
         # To store intermediate steps
         xs = [x.clone()]
@@ -702,7 +713,7 @@ class GPT2(pl.LightningModule):
                     input_ids=x,
                     targets=None,
                     input_mask=None,
-                    attn_mask=attn_mask
+                    attention_mask=attention_mask
                 )
             
             # Apply temperature and optional top-k sampling
@@ -815,8 +826,8 @@ class GPT2(pl.LightningModule):
             mask[0, prompt_len:] = True
             
             # Make prediction
-            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(self.device)  # Full attention for testing
-            logits, _ = self.forward(input_ids, input_ids, mask, attn_mask)
+            attention_mask = get_annealing_mask(seq_len, B, 1.0).to(self.device)  # Full attention for testing
+            logits, _ = self.forward(input_ids, input_ids, mask, attention_mask)
             
             # Get prediction probabilities for masked positions
             probs = torch.softmax(logits[0, prompt_len:], dim=-1)
