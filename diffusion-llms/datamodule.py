@@ -20,6 +20,7 @@ class MemmapTokenDataset(Dataset):
             memmap_path,
             context_length,
             is_diffusion_training: bool = False,
+            is_padded_dataset: bool = False,
             eos_token_id: int = None,      
             pad_token_id: int = None,     
         ):
@@ -27,7 +28,7 @@ class MemmapTokenDataset(Dataset):
         self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
         self.context_length = context_length
         self.is_diffusion_training = is_diffusion_training
-        self.stride = context_length if self.is_diffusion_training else 1
+        self.stride = context_length if is_padded_dataset else 1
         
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
@@ -61,6 +62,7 @@ class MemmapTokenDataset(Dataset):
 
         # If diffusion, compute the mask
         if self.is_diffusion_training:
+            # TODO: if predicting pad token make sure to have a balanced mask
             # Random mask for the output sequence
             # of shape # (context_length,)
             t = torch.rand(1).item()
@@ -68,8 +70,11 @@ class MemmapTokenDataset(Dataset):
                 size=(y.shape[0],), 
                 dtype=torch.float32
             ) < t
-            # TODO: always mask <eos>?
-
+            # make sure at least one is masked
+            if not torch.any(mask):
+                idx = torch.randint(0, mask.shape[0], size=(1,)).item()
+                mask[idx] = True
+                
         # Cast to correct type
         X = torch.from_numpy(X).to(torch.int64)
         y = torch.from_numpy(y).to(torch.int64)
@@ -104,6 +109,7 @@ class MemmapDataModule(pl.LightningDataModule):
                 self.memmap_path, 
                 self.context_length,
                 is_diffusion_training=self.config["pipeline"] == "diffusion",
+                is_padded_dataset= self.config["padded_dataset"],
                 eos_token_id=self.config.get("eos_token_id", None),
                 pad_token_id=self.config.get("pad_token_id", None)
             )

@@ -2,7 +2,9 @@
   "pipeline": "arm",
   "init_from":"",
   "memmap_path": "./data/train_7K.bin",
+  "padded_dataset": false,
   "context_length": 1024,
+  
   "n_embd": 768,
   "n_layer": 12,
   "n_head": 12, 
