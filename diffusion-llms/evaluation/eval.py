@@ -1,10 +1,18 @@
 """
-This script evaluates the performance of a GPT-2 model on various tasks such as Lambada, HellaSwag, Winogrande, PIQA, Social IQA, and infilling tasks. It uses the Hugging Face datasets library to load the datasets and evaluates the model's performance using accuracy and F1 score metrics. The script also allows for the evaluation of the model on a specific task by specifying the task name as a command line argument.
+This script evaluates the performance of a GPT-2 model on various tasks such 
+as Lambada, HellaSwag, Winogrande, PIQA, Social IQA, and infilling tasks. 
+
+It uses the Hugging Face datasets library to load the datasets and evaluates 
+the model's performance using accuracy and F1 score metrics. 
+
+The script also allows for the evaluation of the model on a specific task by 
+specifying the task name as a command line argument.
+
 HOW TO USE:
-3. Run the script from the command line with the following command:
-   python eval.py <path/to/config.json> <evaluation_type> [max_iter]
+Run the script from the command line with the following command:
+   $ python eval.py <path/to/config.json> <EVALUATION_TYPE> [max_iter]
    where <path/to/config.json> is the path to the configuration file 
-   <evaluation_type> can be one of the following:
+   <EVALUATION_TYPE> can be one of the following:
    - lambada
    - hellaswag
    - wino
@@ -13,21 +21,24 @@ HOW TO USE:
    - infilling
    - trivia
    and [max_iter] is an optional argument to limit the number of iterations for evaluation.
-   """
-
+"""
 
 import sys
 import json
+import csv
 
+import evaluate
 import torch
 import tiktoken
-from model import GPT2
 from f1 import compute_f1, normalize_answer
 
 import re
 import numpy as np
 import time
 
+# To load model from parent directory
+sys.path.append("../")
+from model import GPT2
 
 def get_device():
     """Get the device to use for PyTorch operations (CPU or cuda or MPS)."""
@@ -45,13 +56,13 @@ def get_device():
 
 def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
     print("Evaluating lambada...")
+    print("Setting diffusion_steps = masked_num")
     start_time = time.time()
     device = get_device()
     total_cnt = 0
     cor = 0
     mask_token = tokenizer.decode([config["mask_id"]])
-    temperature = config.get("temperature")
-    top_k = config.get("top_k")
+
     with open("evaluation/lambada_test_plain_text.txt", "r", encoding="utf-8") as file:
         for line in file:
             total_cnt += 1
@@ -65,12 +76,14 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
                 .to(device)
             )  # prefix is all the line except the last word
             masked_nums = x0.shape[1] - prefix.shape[1]
-            # NOTE: args.diffusion_steps = masked_nums        # # in diffugpt they set the diffusion step it in this way
             xs = model.generate(
-                prefix,
-                max_new_tokens=masked_nums,
-                temperature=temperature,
-                top_k=top_k,
+                pipeline = config["pipeline"],
+                input_ids = prefix,
+                max_new_tokens = masked_nums,
+                temperature = config["temperature"],
+                top_k = config["top_k"],
+                denoising_strategy = config["denoising_strategy"],    # "random" / "entropy"
+                diffusion_steps = masked_nums                       # NOTE: in diffugpt they set the diffusion step it in this way
             )
             x = xs[-1][0]
             pred = tokenizer.decode(x.tolist()[1:]).replace(mask_token, "<mask>")
@@ -289,11 +302,6 @@ def eval_siqa(model, tokenizer, config, max_iter=np.inf):
     print("acc:", cor / total_cnt)
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
 
-
-import csv, json
-import evaluate
-
-
 def eval_infilling(model, tokenizer, config, max_iter=np.inf):
     """It does infilling on the true sentence in the Story Cloze Test, generating the middle sentence given the first
     and last sentences and computes the rouge score between the generated and the true middle sentence.
@@ -446,26 +454,25 @@ def print_output(x, tokenizer, mask_token):
 
 def main():
     # From the command line we can specify the config.file
-    if len(sys.argv) == 2:
+    if len(sys.argv) >= 3:
         CONFIG_PATH = sys.argv[1]
+        EVALUATION_TYPE = sys.argv[2].lower()
+        MAX_ITER = int(sys.argv[3]) if len(sys.argv) > 3 else np.inf
+        print(
+            f"CONFIG_PATH = {CONFIG_PATH}\n"
+            f"EVALUATION_TYPE = {EVALUATION_TYPE}\n"
+            F"MAX_ITER = {MAX_ITER}"
+        )
+        
     else:
-        print("No path/to/config.json provided, defaulting to './config.json'")
-        CONFIG_PATH = "./config.json"
-
+        print("Usage: python eval.py path/to/config.json <EVALUATION_TYPE> [max_iter]")
+        print("Available evaluation types: lambada, hellaswag, wino, piqa, siqa, infilling, trivia")
+        sys.exit(1)
+        
     with open(CONFIG_PATH, "r") as f:
         config = json.load(f)
 
-
-    # Decide which evaluation to run based on command line arguments
-    if len(sys.argv) < 3:
-        print("Usage: python eval.py <path/to/config.json> <evaluation_type> [max_iter]")
-        print("Available evaluation types: lambada, hellaswag, wino, piqa, siqa, infilling, trivia")
-        sys.exit(1)
-
-    evaluation_type = sys.argv[2].lower()
-    max_iter = int(sys.argv[3]) if len(sys.argv) > 3 else np.inf
-
-    if evaluation_type not in [
+    if EVALUATION_TYPE not in {
         "lambada",
         "hellaswag",
         "wino",
@@ -473,11 +480,15 @@ def main():
         "siqa",
         "infilling",
         "trivia",
-    ]:
-        print(f"Unknown evaluation type: {evaluation_type}")
+    }:
+        print(f"Unknown evaluation type: {EVALUATION_TYPE}")
         print("Available evaluation types: lambada, hellaswag, wino, piqa, siqa, infilling, trivia")
         sys.exit(1)
 
+    if config["pipeline"] != "diffusion":
+        print("Evaluation implemented only for pipeline = diffusion.")
+        sys.exit(1)
+        
     # Tokenize
     tokenizer = tiktoken.get_encoding("gpt2")
 
@@ -486,21 +497,20 @@ def main():
     model = GPT2(CONFIG_PATH)
     model = torch.compile(model).to(device)
 
-    if evaluation_type == "lambada":
-        eval_Lambada(model, tokenizer, config, max_iter)
-    elif evaluation_type == "hellaswag":
-        eval_hellaswag(model, tokenizer, config, max_iter)
-    elif evaluation_type == "wino":
-        eval_wino(model, tokenizer, config, max_iter)
-    elif evaluation_type == "piqa":
-        eval_piqa(model, tokenizer, config, max_iter)
-    elif evaluation_type == "siqa":
-        eval_siqa(model, tokenizer, config, max_iter)
-    elif evaluation_type == "infilling":
-        eval_infilling(model, tokenizer, config, max_iter)
-    elif evaluation_type == "trivia":
-        eval_triva(model, tokenizer, config, max_iter)
-
+    if EVALUATION_TYPE == "lambada":
+        eval_Lambada(model, tokenizer, config, MAX_ITER)
+    elif EVALUATION_TYPE == "hellaswag":
+        eval_hellaswag(model, tokenizer, config, MAX_ITER)
+    elif EVALUATION_TYPE == "wino":
+        eval_wino(model, tokenizer, config, MAX_ITER)
+    elif EVALUATION_TYPE == "piqa":
+        eval_piqa(model, tokenizer, config, MAX_ITER)
+    elif EVALUATION_TYPE == "siqa":
+        eval_siqa(model, tokenizer, config, MAX_ITER)
+    elif EVALUATION_TYPE == "infilling":
+        eval_infilling(model, tokenizer, config, MAX_ITER)
+    elif EVALUATION_TYPE == "trivia":
+        eval_triva(model, tokenizer, config, MAX_ITER)
 
 
 if __name__ == "__main__":

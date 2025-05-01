@@ -58,7 +58,7 @@ class GPT2(pl.LightningModule):
                 1,
                 self.config["attn_annealing_steps"]
             )
-        
+            
         if self.config["pad_token_id"]:
             assert self.config["pad_token_id"] == 50257
             self.extend_vocab()
@@ -364,10 +364,10 @@ class GPT2(pl.LightningModule):
         max_new_tokens: int,
         temperature: float,
         top_k: int,
-        do_sample: bool,
-        repetition_penalty: float,
-        denoising_strategy: str,    # "random" / "entropy"
-        diffusion_steps: int
+        do_sample: bool = None,
+        repetition_penalty: float = None,
+        denoising_strategy: str = None,    # "random" / "entropy"
+        diffusion_steps: int = None
     )->list[torch.Tensor]:
         """
         Samples from the model according to the specified pipeline. 
@@ -378,6 +378,8 @@ class GPT2(pl.LightningModule):
         When pipeline is arm, the list has length 1.
         """
         if pipeline == "arm":
+            assert do_sample is not None
+            assert repetition_penalty is not None
             genconfig = GenerationConfig(
                 max_new_tokens = max_new_tokens,
                 temperature=temperature,
@@ -393,6 +395,8 @@ class GPT2(pl.LightningModule):
             return [out]
         
         elif pipeline == "diffusion":
+            assert diffusion_steps is not None
+            assert denoising_strategy is not None
             xs = self.generate_diffusion(
                 input_ids,
                 max_new_tokens = max_new_tokens,
@@ -560,7 +564,7 @@ class GPT2(pl.LightningModule):
         """
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
         assert input_ids[0,0] == 50256  # <|endoftext|> token
-        device = "cuda"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.eval()
         input_ids = input_ids.to(device)
         # Get dimensions
