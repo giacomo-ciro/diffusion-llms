@@ -181,16 +181,50 @@ class GPT2(pl.LightningModule):
         input_mask:torch.Tensor,
         attention_mask:torch.Tensor      # [B, 1, context_length, context_length]    to be broadcasted to keys, querys, values
     ) -> tuple:
+        """
+        Compute the logits for the given input_ids. 
+        If targets are provided computes the loss.
+        It requires attention_mask to be always specified.
+
+        Params:
+            - input_ids (torch.Tensor[torch.int64]): the input tokens id. Of shape [B, seq_len].
+            - targets (torch.Tensor[torch.int64]): the target tokens to be predicted. Of shape [B, seq_len].
+            - input_mask (torch.Tensor[bool]): which tokens in the input are masked. Of shape [B, seq_len]. 
+            (b, i) = True means the i-th token in the b-th batch is masked 
+            - attention_mask (torch.Tensor[bool]): the broadcastable attention mask of shape [B, 1, seq_len, seq_len]. 
+            (b, 0, i, j) = True means the i-th token in the b-th batch can attent to
+            the j-th token in the b-th batch. 
         
-        # Logging
-        # Store the percentage of the non_zero entries in the mask
+        """
+
+        # -- Deal with the Attention Matrix
+        # 1. Log the percentage of the non_zero entries in the mask
         assert len(attention_mask.shape) == 4
         attention_mask = attention_mask.to(self.device)
-        non_zero_mask = attention_mask.sum().item() / attention_mask.numel()
-        self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
-        # self.log("global_step", self.global_step, prog_bar = True)
 
+        # 2. Update attn_mask to prevent tokens to look at masked ones
+        B, _, _, seq_len = attention_mask.shape
+        # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
+        masked_tokens = torch.eq(input_ids, self.config["mask_id"])
+        # [B, 1, 1, seq_len]
+        masked_tokens = masked_tokens[:, None, None, :]
+        # [B, 1, seq_len, seq_len]
+        masked_tokens = masked_tokens.expand(-1, -1, seq_len, -1)
+        # Silence the masked tokens (set to false in the attention mask)
+        attention_mask = attention_mask * (~masked_tokens)
+        # 3. Activate back the diagonal (tokens can attend to themselves)
+        # [seq_len, seq_len]
+        diagonal_mask = torch.eye(seq_len, dtype=torch.bool, device=self.device)
+        # [1, 1, seq_len, seq_len]
+        diagonal_mask = diagonal_mask[None, None, :, :]
+        # [B, 1, seq_len, seq_len]
+        diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
+        attention_mask = attention_mask | diagonal_mask
         
+        # Sanity check
+        if input_mask is not None:
+            assert torch.allclose(masked_tokens, input_mask)
+
         # Forward pass
         logits = self.gpt2.forward(
             input_ids = input_ids,
@@ -212,9 +246,10 @@ class GPT2(pl.LightningModule):
             masked_indices = torch.nonzero(mask_flat, as_tuple=True)[0]
             masked_logits = logits_flat[masked_indices]
             masked_targets = targets_flat[masked_indices]
-            
-            # Compute loss
+
             loss = torch.nn.functional.cross_entropy(masked_logits, masked_targets)
+
+        # Otherwise, return None
         else:
             loss = None
 
@@ -225,15 +260,22 @@ class GPT2(pl.LightningModule):
         # Read in batch
         input_ids, targets, input_mask = batch        
 
-        # Prepare the attention mask:
+        # Get shapes
         B, context_length = input_ids.shape
+        
+        # Diffusion --> anneal attention mask & mask input tokens
         if self.config["pipeline"] == "diffusion":
+            # Mask input ids at specified positions
+            input_ids[input_mask] = self.config["mask_id"]
+            
             # Current annealing step (% of upper tril to be unmasked)
             if self.global_step < self.config["attn_annealing_steps"]:
                 p = self.annealing_schedule[self.global_step]
             else:
                 p = 1.0
             attention_mask = get_annealing_mask(context_length, B, p)
+        
+        # Arm --> get causal mask
         else:
             attention_mask = get_causal_mask(context_length, B)
 
@@ -260,6 +302,28 @@ class GPT2(pl.LightningModule):
             on_epoch=False,
             prog_bar=True
         )
+        self.log(
+            "train/masked_inputs_perc",
+            input_mask.sum().item() / input_mask.numel(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            "train/median_predicted_token",
+            torch.median(logits.argmax(dim=-1)).item(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            "train/non_zero_mask",
+            attention_mask.sum().item() / attention_mask.numel(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -268,9 +332,13 @@ class GPT2(pl.LightningModule):
         input_ids, targets, input_mask = batch
         assert input_ids.dtype == torch.int64
 
-        # Attention mask
+        # Get shapes
         B, context_length = input_ids.shape
+        
+        # Diffusion --> anneal attention mask & mask input tokens
         if self.config["pipeline"] == "diffusion":
+            # Mask input ids at specified positions
+            input_ids[input_mask] = self.config["mask_id"]
             # can see everything at validation
             attention_mask = get_annealing_mask(context_length, B, 1.0)
         else:
@@ -292,7 +360,22 @@ class GPT2(pl.LightningModule):
             on_epoch=True,  # Automatically accumulates and logs at the end of the epoch
             prog_bar=True,  # Log to the progbar
         )
-        
+        preds = logits.argmax(dim=-1).flatten().numpy()
+        _, counts = np.unique(
+            preds,
+            return_counts = True
+        )
+        probs = counts / len(preds)
+        entropy = - np.sum(probs * np.log2(probs))
+        max_entropy_perc = entropy / np.log2(len(preds))
+        self.log(
+            "valid/predictions_entropy_perc",
+            max_entropy_perc,
+            on_epoch=True,
+            on_step=False,
+            prog_bar=True
+        )
+
         return loss
 
     def configure_optimizers(self):
