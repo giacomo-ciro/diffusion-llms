@@ -14,7 +14,7 @@ import numpy as np
 import tiktoken
 from datasets import load_dataset
 
-this_script_name = print(os.path.basename(__file__))
+this_script_name = os.path.basename(__file__)
 
 # Command line arguments
 if len(sys.argv) >= 3:
