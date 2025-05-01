@@ -14,14 +14,16 @@ import numpy as np
 import tiktoken
 from datasets import load_dataset
 
+this_script_name = print(os.path.basename(__file__))
+
 # Command line arguments
 if len(sys.argv) >= 3:
     SAMPLE_SIZE = int(sys.argv[1])
     CONFIG_PATH = sys.argv[2]
     n = 3       # how many samples to inspect at the end
 else:
-    print("Usage: python prepare_var_len.py <SAMPLE_SIZE> <CONFIG_PATH>")
-    print("Example: python prepare_var_len.py 1000 ../config.json")
+    print("Usage: python {this_script_name} <SAMPLE_SIZE> <CONFIG_PATH>")
+    print("Example: python {this_script_name} 1000 ../config.json")
     sys.exit()
 
 # Load configuration
@@ -151,7 +153,7 @@ with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
     f.write(
 f"""Variable Length Dataset (Fixed Structure)
 Generated on: {time.strftime("%d-%m-%Y %H:%M:%S")}
-Using: $ python improved_prepare_var_len.py {SAMPLE_SIZE} {CONFIG_PATH}
+Using: $ python {this_script_name} {SAMPLE_SIZE} {CONFIG_PATH}
 Total number of tokens: {tot_len:,}
 Number of samples: {SAMPLE_SIZE}
 Context length: {context_length}
