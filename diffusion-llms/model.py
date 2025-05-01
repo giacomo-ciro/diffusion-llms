@@ -185,18 +185,11 @@ class GPT2(pl.LightningModule):
         # Logging
         # Store the percentage of the non_zero entries in the mask
         assert len(attention_mask.shape) == 4
+        attention_mask = attention_mask.to(self.device)
         non_zero_mask = attention_mask.sum().item() / attention_mask.numel()
         self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
         # self.log("global_step", self.global_step, prog_bar = True)
-        
-        # Ensure correct device & type
-        # Always requried
-        input_ids = input_ids.cpu().to(torch.int64).to(self.device)     # (B, context_length)
-        attention_mask = attention_mask.to(self.device)                 # (B, 1, context_length, context_length)    
-        # Not needed at inference
-        if targets is not None:
-            targets = targets.cpu().to(torch.int64).to(self.device)     # (B, context_length)
-            input_mask = input_mask.to(self.device)                     # (B, context_length)
+
         
         # Forward pass
         logits = self.gpt2.forward(
@@ -260,13 +253,13 @@ class GPT2(pl.LightningModule):
             on_epoch=False,
             prog_bar=True
         )
-        # self.log(
-        #     "train/learning_rate",
-        #     self.optimizers().param_groups[0]['lr'],
-        #     on_step=True,
-        #     on_epoch=False,
-        #     prog_bar=True
-        # )
+        self.log(
+            "train/learning_rate",
+            self.optimizers().param_groups[0]['lr'],
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
