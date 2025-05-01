@@ -242,7 +242,7 @@ class GPT2(pl.LightningModule):
                 p = 1.0
             attention_mask = get_annealing_mask(context_length, B, p)
         else:
-            attention_mask = get_causal_mask(B, context_length)
+            attention_mask = get_causal_mask(context_length, B)
 
         # Forward pass
         logits, loss = self.forward(
