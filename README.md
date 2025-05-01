@@ -13,11 +13,8 @@ Then, we test how confident our model is in predicting the EoS token at the firs
 Finally, we propose a method to improve the model capacity of predicting the EoS token: fine-tuning on [text + mask + EoS + mask] examples to improve the model's accuracy in predicting the eos token at the first diffusion step by only looking at the provided context.
 
 ## TO-DO's
-- [ ] Check correctness of `prepare_var_len.py` script (generate dataset of sequences of text + eos + pad. The length of the sequences is the same thanks to the pad token, but the underlying content has variable length)
-- [ ] Check correctness of the implementation in `model.py` (correct masking, correct loss computation, correct shifting etc)
-- [ ] Further pre-train DiffuGPT on the var len dataset
-- [x] Create `eval.py` script to measure performance on benchmarks (the ones used in DiffuGPT paper, can copy from evaluation script on their github)
-- [ ] Train of dataset of text + mask + eos + mask (to improve eos accuracy)
+- [ ] Measure performance (eos prediction accuracy, benchmarks) of pre-trained DiffuGPT before and after fine-tuning on dataset of (text + eos + pad)
+- [ ] Curriculum learning (gradually increase the pad_masked_perc from 0 to 0.5)
 
 ### Sync 30/04/25
 - [ ] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)

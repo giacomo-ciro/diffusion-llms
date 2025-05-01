@@ -17,30 +17,36 @@ class MemmapTokenDataset(Dataset):
     """
     def __init__(
             self,
-            memmap_path,
-            context_length,
-            is_diffusion_training: bool = False,
-            is_padded_dataset: bool = False,
-            eos_token_id: int = None,      
-            pad_token_id: int = None,
-            pad_masked_perc: float=0.5,     
+            config: dict,
         ):
 
-        self.data = np.memmap(memmap_path, dtype=np.uint16, mode='r')
-        self.context_length = context_length
-        self.is_diffusion_training = is_diffusion_training
-        self.is_padded_dataset = is_padded_dataset
-        self.stride = context_length if is_padded_dataset else 1
-        self.pad_masked_perc = pad_masked_perc
-        
+        self.data = np.memmap(config["memmap_path"], dtype=np.uint16, mode='r')
+        self.context_length = config["context_length"]
+        self.is_diffusion_training = config["pipeline"] == "diffusion"
+        self.is_padded_dataset = config["padded_dataset"]
+        self.stride = config["context_length"] if self.is_padded_dataset else 1
+        self.pad_masked_perc = config["pad_masked_perc"]
+        self.pad_annealing_steps = config["pad_annealing_steps"]
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
-        total_positions = max(0, len(self.data) - (context_length + 1) + 1)
+        total_positions = max(0, len(self.data) - (self.context_length + 1) + 1)
         self.effective_length = (total_positions + self.stride - 1) // self.stride
         
         # Setup for variable length generation
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        self.eos_token_id = config["eos_token_id"]
+        self.pad_token_id = config["pad_token_id"]
+
+        # Anneal the pad tokens to be masked
+        if (self.is_diffusion_training and
+            self.is_padded_dataset and
+            self.pad_annealing_steps > 0):
+            self.pad_annealing_schedule = np.linspace(
+                0,
+                self.pad_masked_perc,
+                self.pad_annealing_steps
+            )
+        self.cur_annealing_step = 0
+            
         
     def __len__(self):
         return self.effective_length
@@ -72,9 +78,16 @@ class MemmapTokenDataset(Dataset):
             # if predicting pad token, make sure to have a balanced mask
             if self.is_padded_dataset:
                 
+                # handle the annealing
+                if self.cur_annealing_step < self.pad_annealing_steps:
+                    pad_masked_perc = self.pad_annealing_schedule[self.cur_annealing_step]
+                    self.cur_annealing_step += 1
+                else:
+                    pad_masked_perc = self.pad_masked_perc
+                
                 # Compute what fraction of masked tokens should be pad / nonpad
-                t_pad = t * self.pad_masked_perc
-                t_nonpad = t * (1-self.pad_masked_perc)
+                t_pad = t * pad_masked_perc
+                t_nonpad = t * (1-pad_masked_perc)
                 
                 # Get the number
                 num_pad = int(t_pad * X.shape[0])
@@ -133,7 +146,6 @@ class MemmapDataModule(pl.LightningDataModule):
             self.config = json.load(f)
         
         self.memmap_path = self.config["memmap_path"]
-        self.context_length = self.config["context_length"]
         self.batch_size = self.config["batch_size"]
         self.val_test_perc = self.config["val_test_perc"]
         self.num_workers = 2
@@ -142,13 +154,7 @@ class MemmapDataModule(pl.LightningDataModule):
         
         if os.path.exists(self.memmap_path):
             self.data = MemmapTokenDataset(
-                self.memmap_path, 
-                self.context_length,
-                is_diffusion_training=self.config["pipeline"] == "diffusion",
-                is_padded_dataset= self.config["padded_dataset"],
-                eos_token_id=self.config["eos_token_id"],
-                pad_token_id=self.config["pad_token_id"],
-                pad_masked_perc=self.config["pad_masked_perc"]
+                self.config
             )
         else:
             print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
