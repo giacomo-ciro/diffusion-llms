@@ -359,7 +359,7 @@ class GPT2(pl.LightningModule):
             on_epoch=True,  # Automatically accumulates and logs at the end of the epoch
             prog_bar=True,  # Log to the progbar
         )
-        preds = logits.argmax(dim=-1).flatten().numpy()
+        preds = logits.argmax(dim=-1).flatten().cpu().numpy()
         _, counts = np.unique(
             preds,
             return_counts = True
