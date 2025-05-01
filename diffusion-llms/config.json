@@ -4,6 +4,7 @@
   "memmap_path": "./data/train_7K.bin",
   "padded_dataset": false,
   "pad_masked_perc": 0.15,
+  "pad_annealing_steps": 100,
   "context_length": 1024,
   
   "n_embd": 768,
