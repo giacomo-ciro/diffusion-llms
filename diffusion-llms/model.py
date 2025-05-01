@@ -206,6 +206,9 @@ class GPT2(pl.LightningModule):
         B, _, _, seq_len = attention_mask.shape
         # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
         masked_tokens = torch.eq(input_ids, self.config["mask_id"])
+        # Sanity check
+        if input_mask is not None:
+            assert torch.allclose(masked_tokens, input_mask)
         # [B, 1, 1, seq_len]
         masked_tokens = masked_tokens[:, None, None, :]
         # [B, 1, seq_len, seq_len]
@@ -220,10 +223,6 @@ class GPT2(pl.LightningModule):
         # [B, 1, seq_len, seq_len]
         diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
         attention_mask = attention_mask | diagonal_mask
-        
-        # Sanity check
-        if input_mask is not None:
-            assert torch.allclose(masked_tokens, input_mask)
 
         # Forward pass
         logits = self.gpt2.forward(
