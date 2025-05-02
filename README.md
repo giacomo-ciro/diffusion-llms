@@ -20,13 +20,13 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 - [ ] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
     - otherwise, we mask and unmask tokens until model predicts where the eos token is
     - observation: if the model is able to predict some mask tokens, it is likely to predict the eos token as well
-- [ ] Define a method to evaluate our specific task (e.g. how to measure the performance of the model in predicting the eos token at the first step of the diffusion process)
+- [dave - in progress] Define a method to evaluate our specific task, e.g., how to measure the performance of the model in predicting the eos token at the first step of the diffusion process (accuracy / metrics / as function of numbe of unmasked tokens etc).
 - [ ] Complete `check_config_validity` in `utils.py`
 
 ### Feedback from Professor
 - ambition is good, doability is the question
 - concretize the chance of success - a series of questions that can be answered quickly at the beginning
-- control how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
+- check how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
 - be very explicit about research question, don’t fear to be overly specific, also be open about the limitations
 - change formulations to see if changing head affects anything: robustness checks
 - find sources that do not affect variance

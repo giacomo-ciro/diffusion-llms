@@ -1,0 +1,10 @@
+Variable Length Dataset (Fixed Structure)
+Generated on: 25-04-2025 15:08:56
+Using: $ python improved_prepare_var_len.py 100 ../local_config_2.json
+Total number of tokens: 35,225
+Number of samples: 100
+Context length: 256
+Number of samples with EOS token: 100
+Number of samples with PAD tokens: 64
+Number of samples with correct EOS->PAD structure: 64
+Format: [prompt tokens] [answer tokens] [EOS token=50256] [PAD tokens=50257]
