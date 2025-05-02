@@ -32,9 +32,13 @@ def forward_gpt2(
     output_hidden_states = (
         output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
     )
+    
+    # Make sure we are always using attention mask
+    assert attention_mask is not None, "attention_patch.py detected None attention mask."
+
     use_cache = use_cache if use_cache is not None else self.config.use_cache
     return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    
     if input_ids is not None and inputs_embeds is not None:
         raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
     elif input_ids is not None:
@@ -71,7 +75,7 @@ def forward_gpt2(
     ## Add by DiffuGPT, adapting for 4d attention-mask.
     if attention_mask is not None and len(attention_mask.shape) == 4: 
         attention_mask = attention_mask
-        print("logging....attention-mask for 4d")
+        # print("logging....attention-mask for 4d")
     else:
         _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
         attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
@@ -142,6 +146,7 @@ def forward_gpt2(
     all_self_attentions = () if output_attentions else None
     all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
     all_hidden_states = () if output_hidden_states else None
+
     for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
         # Model parallel
         if self.model_parallel:

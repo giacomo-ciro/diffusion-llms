@@ -1,5 +1,6 @@
 import json
 import math
+import os
 
 import numpy as np
 import torch
@@ -11,17 +12,45 @@ from utils import get_annealing_mask, get_causal_mask
 
 # Modify the HF implementation so 
 # the attention mask provided is actually used
-replace_attention_mask()
+# JACK: manually inspected the call tree and 
+# printed all intermediate attention mask,
+# confirmed that without using this patch 
+# the provided attention mask is not considered
+# --> calling this function is necessary
+# to enable custom attention masks !
+replace_attention_mask()   
 
 class GPT2(pl.LightningModule):
     """
-    Wraps the GPT2LMHeadModel class from HuggingFace, and adapts to Lightning framework.
+    Wraps the GPT2LMHeadModel class from HuggingFace, and adapts it to Lightning framework.
     """
 
     def __init__(
         self,
         config_path,
     ):
+        """
+        Initializes the GPT2 LightningModule.
+
+        This constructor performs the following steps:
+        1. Loads the model configuration from the specified JSON file (`config_path`).
+        2. Initializes the underlying GPT-2 model based on the `init_from` setting
+           in the configuration. This can be:
+           - A standard Hugging Face GPT-2 variant ('gpt2', 'gpt2-medium', etc.).
+           - A pre-trained DiffuGPT model ('diffugpt').
+           - A new GPT-2 model initialized from scratch (if `init_from` is not
+             one of the above or is explicitly set to initialize from scratch).
+        3. If the configured pipeline is 'diffusion' and `attn_annealing_steps` > 0,
+           it sets up a linear annealing schedule (`self.annealing_schedule`) for
+           the attention mask. This schedule determines the probability of unmasking
+           attention entries at each training step during the annealing phase.
+        4. If a `pad_token_id` is specified in the configuration (expected to be 50257),
+           it extends the model's vocabulary and embedding layers to accommodate this
+           additional token using the `extend_vocab` method.
+
+        Args:
+            config_path (str): Path to the JSON configuration file for the model.
+        """
         super().__init__()
 
         # Load configuration file
@@ -45,27 +74,37 @@ class GPT2(pl.LightningModule):
         # At each step i, the entries in the attention mask 
         # will be un-masked with probability annealing_schedule[i]
         # at the last annealing step, all entries will be unmasked
-        if self.config["pipeline"] == "diffusion":
+        if self.config["pipeline"] == "diffusion" and self.config["attn_annealing_steps"] > 0:
             self.annealing_schedule = np.linspace(
                 0,
                 1,
                 self.config["attn_annealing_steps"]
             )
-    
+            
+        if self.config["pad_token_id"]:
+            assert self.config["pad_token_id"] == 50257
+            self.extend_vocab()
 
     def init_diffugpt(self):
         """
-        Load the pre-trained DiffuGPT:
-            1. Init a new gpt2 from scratch
-            2. Download DiffuGPT weights from HF
-            3. Rename accordingly
-            4. Load the weights and check match (wte & lm_head are tied)
+        Loads the pre-trained DiffuGPT:
+            1. Initializes a new gpt2 from scratch
+            2. Downloads DiffuGPT weights from HF
+            3. Renames it accordingly
+            4. Loads the weights and checks match (wte & lm_head are tied)
+            5. Adds a new row in the embedding matrix
         """
         from huggingface_hub import hf_hub_download
         from safetensors.torch import load_file
         
-        # Initialize a new gpt2 model
-        self.init_gpt2(pretrained=False)
+        # Initialize a new gpt2-2 model
+        gptconfig = GPT2Config(
+            n_positions=1024,
+            n_embd=768,
+            n_layer=12,
+            n_head=12,
+        )
+        self.gpt2 = GPT2LMHeadModel(gptconfig)
 
         # Checks
         wte_before = self.gpt2.lm_head.weight.clone()
@@ -94,16 +133,16 @@ class GPT2(pl.LightningModule):
         # Checks
         wte_after = self.gpt2.lm_head.weight.clone()
         lm_head_after = self.gpt2.transformer.wte.weight.clone()
-        assert not torch.all(wte_before == wte_after)
-        assert not torch.all(lm_head_before == lm_head_after)
-        assert torch.all(wte_after == lm_head_after)
+        assert not torch.allclose(wte_before, wte_after)
+        assert not torch.allclose(lm_head_before, lm_head_after)
+        assert torch.allclose(wte_after, lm_head_after)
 
     def init_gpt2(
             self,
             pretrained: str=None,
         ):
         """
-        Init a gpt2 model from scratch or from HF checkpoint.
+        Initializes a gpt2 model from scratch or from HF checkpoint.
         """
 
         if pretrained:
@@ -120,77 +159,168 @@ class GPT2(pl.LightningModule):
             )
             self.gpt2 = GPT2LMHeadModel(gptconfig)
 
+    def extend_vocab(self):
+        """
+        Adapts the wte and lm_head to handle an additional token with id=50257
+        """
+        # Create new wte & lm_head with additional token
+        old_wte = self.gpt2.transformer.wte
+        new_wte = torch.nn.Embedding(
+            old_wte.weight.shape[0]+1,
+            old_wte.weight.shape[1]
+        )
+        old_lm_head = self.gpt2.lm_head
+        new_lm_head = torch.nn.Linear(
+            in_features=old_lm_head.in_features,
+            out_features=old_lm_head.out_features+1,
+            bias=False
+        ) 
+        # Copy the old weights, init new to the mean
+        with torch.no_grad():
+            new_wte.weight[:-1] = old_wte.weight
+            new_wte.weight[-1] = torch.mean(old_wte.weight, axis = 0)
+            # # Copy weights to the new lm_head
+            # new_lm_head.weight[:-1] = old_lm_head.weight
+            # new_lm_head.weight[-1] = torch.mean(old_lm_head.weight, axis=0)
+        
+        # Assign to the model
+        self.gpt2.transformer.wte = new_wte
+        self.gpt2.lm_head = new_lm_head
+
+        # Tie the weights
+        self.gpt2.lm_head.weight = self.gpt2.transformer.wte.weight
+
+        # Clear old
+        del old_wte
+        del old_lm_head
+        torch.cuda.empty_cache()  # If using GPU
+    
     def forward(
         self,
         input_ids:torch.Tensor,
         targets:torch.Tensor,
-        input_mask:torch.Tensor=None,
-        attn_mask:torch.Tensor=None
+        input_mask:torch.Tensor,
+        attention_mask:torch.Tensor      # [B, 1, context_length, context_length]    to be broadcasted to keys, querys, values
     ) -> tuple:
-        
-        # Logging
-        # Store the percentage of the non_zero entries in the mask
-        assert len(attn_mask.shape) == 4
-        non_zero_mask = attn_mask.sum().item() / attn_mask.numel()
-        self.log("non_zero_mask", non_zero_mask, on_step=True, on_epoch=False, prog_bar=True)
+        """
+        Computes the logits for the given input_ids. 
+        If targets are provided computes the loss.
+        It requires attention_mask to be always specified.
 
-        # If labels provided, gpt2 automatically shifts them to 
-        # compute the loss (here we do it manually) and returns 
-        # a CausalLMOutputWithCrossAttentions object, with 
-        # attribute .logits
+        Params:
+            - input_ids (torch.Tensor[torch.int64]): the input tokens id. Of shape [B, seq_len].
+            - targets (torch.Tensor[torch.int64]): the target tokens to be predicted. Of shape [B, seq_len].
+            - input_mask (torch.Tensor[bool]): which tokens in the input are masked. Of shape [B, seq_len]. 
+            (b, i) = True means the i-th token in the b-th batch is masked 
+            - attention_mask (torch.Tensor[bool]): the broadcastable attention mask of shape [B, 1, seq_len, seq_len]. 
+            (b, 0, i, j) = True means the i-th token in the b-th batch can attent to
+            the j-th token in the b-th batch. 
+        """
+
+        # -- Deal with the Attention Matrix
+        # 1. Log the percentage of the non_zero entries in the mask
+        assert len(attention_mask.shape) == 4
+        attention_mask = attention_mask.to(self.device)
+
+        # 2. Update attn_mask to prevent tokens to look at masked ones
+        B, _, _, seq_len = attention_mask.shape
+        # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
+        masked_tokens = torch.eq(input_ids, self.config["mask_id"])
+        # Sanity check
+        if input_mask is not None:
+            assert torch.allclose(masked_tokens, input_mask) or torch.all(input_mask)
+        # [B, 1, 1, seq_len]
+        masked_tokens = masked_tokens[:, None, None, :]
+        # [B, 1, seq_len, seq_len]
+        masked_tokens = masked_tokens.expand(-1, -1, seq_len, -1)
+        # Silence the masked tokens (set to false in the attention mask)
+        attention_mask = attention_mask * (~masked_tokens)
+        # 3. Activate back the diagonal (tokens can attend to themselves)
+        # [seq_len, seq_len]
+        diagonal_mask = torch.eye(seq_len, dtype=torch.bool, device=self.device)
+        # [1, 1, seq_len, seq_len]
+        diagonal_mask = diagonal_mask[None, None, :, :]
+        # [B, 1, seq_len, seq_len]
+        diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
+        attention_mask = attention_mask | diagonal_mask
+
+        # Forward pass
         logits = self.gpt2.forward(
             input_ids = input_ids,
-            attn_mask = attn_mask
+            attention_mask = attention_mask
         ).logits
 
+        # If targets provided, compute loss
         if targets is not None:
-            if input_mask is not None:
-                B, seq_len, vocab_size = logits.shape
+            B, seq_len, vocab_size = logits.shape
 
-                # Reshape to (B*seq_len, vocab_size)
-                logits_flat = logits.view(-1, vocab_size)
-                
-                # Reshape  to (B*seq_len)
-                targets_flat = targets.view(-1)
-                mask_flat = input_mask.view(-1)
-                
-                # Select the logits and targets for masked tokens only
-                masked_indices = torch.nonzero(mask_flat, as_tuple=True)[0]
-                masked_logits = logits_flat[masked_indices]
-                masked_targets = targets_flat[masked_indices]
-                
-                # Compute loss
-                loss = torch.nn.functional.cross_entropy(masked_logits, masked_targets)
-            else:
-                loss = torch.nn.functional.cross_entropy(
-                    input = logits.view(-1, logits.size(-1)), # (B*context_length, vocab_size)
-                    target = targets.reshape(-1),   # (B, context_length) -> (B*context_length,)
-                )
+            # Reshape to (B*seq_len, vocab_size)
+            logits_flat = logits.view(-1, vocab_size)
+            
+            # Reshape  to (B*seq_len)
+            targets_flat = targets.view(-1)
+            mask_flat = input_mask.view(-1)
+            
+            # Select the logits and targets for masked tokens only
+            masked_indices = torch.nonzero(mask_flat, as_tuple=True)[0]
+            masked_logits = logits_flat[masked_indices]
+            masked_targets = targets_flat[masked_indices]
+
+            loss = torch.nn.functional.cross_entropy(masked_logits, masked_targets)
+
+        # Otherwise, return None
         else:
             loss = None
 
         return logits, loss
 
     def training_step(self, batch, batch_idx):
+        """
+        Performs a single training step.
+        This method processes a batch of data, performs a forward pass through the model,
+        calculates the loss, logs various training metrics, and returns the loss.
+        It handles different attention masking strategies (annealing for diffusion, causal for ARM)
+        based on the configuration.
+        Args:
+            batch: A tuple containing input_ids, targets, and input_mask tensors.
+            batch_idx: The index of the current batch.
+        Returns:
+            torch.Tensor: The calculated loss for the training step.
+        """
         
         # Read in batch
         input_ids, targets, input_mask = batch        
-        input_ids = input_ids.cpu().to(torch.int64).to(self.device) # (B, context_length)
-        targets = targets.cpu().to(torch.int64).to(self.device) # (B, context_length)
 
-        # Prepare the attention mask:
+        # Get shapes
         B, context_length = input_ids.shape
+        
+        # Diffusion --> anneal attention mask & mask input tokens
         if self.config["pipeline"] == "diffusion":
-            p = self.annealing_schedule[self.global_step] if self.global_step < len(self.annealing_schedule) else 1.0
-            attn_mask = get_annealing_mask(context_length, B, p).to(input_ids.device)
+            # Mask input ids at specified positions
+            input_ids[input_mask] = self.config["mask_id"]
+            
+            # Current annealing step (% of upper tril to be unmasked)
+            if self.global_step < self.config["attn_annealing_steps"]:
+                p = self.annealing_schedule[self.global_step]
+            else:
+                p = 1.0
+            attention_mask = get_annealing_mask(context_length, B, p)
+        
+        # Arm --> get causal mask
         else:
-            attn_mask = get_causal_mask(B, context_length)
+            attention_mask = get_causal_mask(context_length, B)
 
         # Forward pass
-        logits, loss = self.forward(input_ids, targets, input_mask, attn_mask)
+        logits, loss = self.forward(
+            input_ids = input_ids,
+            targets = targets,
+            input_mask = input_mask,
+            attention_mask = attention_mask
+        )
         
         # Logging
         self.log(
+            # Cross entropy loss of the token prediction task
             "train/loss",
             loss,
             on_step=True,
@@ -198,51 +328,146 @@ class GPT2(pl.LightningModule):
             prog_bar=True
         )
         self.log(
+            # Learning rate (onecycle schedule)
             "train/learning_rate",
             self.optimizers().param_groups[0]['lr'],
             on_step=True,
             on_epoch=False,
             prog_bar=True
         )
+        self.log(
+            # Percentage of tokens masked in the input
+            "train/masked_inputs_perc",
+            input_mask.sum().item() / input_mask.numel(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            # Median token in the prediction (prediction = argmax of the logits)
+            "train/median_predicted_token",
+            torch.median(logits.argmax(dim=-1)).item(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            # Percentage of attention mask = True (~0.5 for lower tril, 1.0 for full attention)
+            "train/non_zero_mask",
+            attention_mask.sum().item() / attention_mask.numel(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            # Percentage of masked tokens that are pad ones
+            "train/pad_masked_perc",
+            torch.mean((targets[input_mask] == self.config["pad_token_id"]).to(torch.float16)).item(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """
+        Performs a single validation step.
+        This method processes a batch of validation data. It handles attention mask
+        creation based on the configured pipeline (diffusion or standard causal).
+        For the diffusion pipeline, it masks input tokens according to `input_mask`
+        and uses a fully visible attention mask (annealing factor 1.0).
+        For other pipelines, it uses a standard causal attention mask.
+        It then performs a forward pass to compute the loss and logits.
+        The validation loss and the entropy of the model's predictions
+        (as a percentage of the maximum possible entropy) are logged.
+        Args:
+            batch: A tuple containing input_ids, targets, and input_mask.
+            batch_idx: The index of the current batch.
+        Returns:
+            The computed loss for the batch.
+        """
         
         # Read in batch
         input_ids, targets, input_mask = batch
-        input_ids = input_ids.cpu().to(torch.int64).to(self.device)
-        targets = targets.cpu().to(torch.int64).to(self.device)
+        assert input_ids.dtype == torch.int64
 
-        # Attention mask
+        # Get shapes
         B, context_length = input_ids.shape
+        
+        # Diffusion --> anneal attention mask & mask input tokens
         if self.config["pipeline"] == "diffusion":
+            # Mask input ids at specified positions
+            input_ids[input_mask] = self.config["mask_id"]
             # can see everything at validation
-            attn_mask = get_annealing_mask(context_length, B, 1.0).to(input_ids.device)
+            attention_mask = get_annealing_mask(context_length, B, 1.0)
         else:
-            attn_mask = get_causal_mask(context_length, B)
+            attention_mask = get_causal_mask(context_length, B)
         
         # Forward pass
-        logits, loss = self.forward(input_ids, targets, input_mask, attn_mask)
+        logits, loss = self.forward(
+            input_ids,
+            targets,
+            input_mask,
+            attention_mask
+        )
         
         # Logging
         self.log(
+            # Cross entropy loss (as for training)
             "valid/loss",
             loss,
             on_step=False,  # Logs the metric at the current step
             on_epoch=True,  # Automatically accumulates and logs at the end of the epoch
             prog_bar=True,  # Log to the progbar
         )
-        
+        preds = logits.argmax(dim=-1).flatten().cpu().numpy()
+        _, counts = np.unique(
+            preds,
+            return_counts = True
+        )
+        probs = counts / len(preds)
+        entropy = - np.sum(probs * np.log2(probs))
+        max_entropy_perc = entropy / np.log2(len(preds))
+        self.log(
+            # Entropy in the predictions (how disperse, to detect flat prediction)
+            "valid/predictions_entropy_perc",
+            max_entropy_perc,
+            on_epoch=True,
+            on_step=False,
+            prog_bar=True
+        )
+
         return loss
 
     def configure_optimizers(self):
-        # create optim groups. Any parameters that is 2D will be weight decayed, 
-        # otherwise no. i.e. all weight tensors in matmuls + embeddings decay, 
-        # all biases and layernorms don't.
-        # Layer normalization parameters and biases already have limited
-        # degrees of freedom, so they don't need regularization as much 
-        # as weight matrices do. This approach has been shown empirically 
-        # to lead to better convergence and model performance.
+        """
+        Configures the optimizer and learning rate scheduler for the model.
+
+        This method sets up the AdamW optimizer and a OneCycleLR learning rate
+        scheduler. It follows the common practice of applying weight decay only
+        to parameters with 2 or more dimensions (typically weight matrices and
+        embeddings), while excluding biases and Layer Normalization parameters
+        (which have fewer dimensions) from weight decay. This separation is
+        achieved by creating two parameter groups.
+
+        Layer normalization parameters and biases already have a limited number of
+        degrees of freedom, so they don't need regularization as much as weight
+        matrices do. This approach has been shown empirically to lead to better
+        convergence and model performance.
+
+        The learning rate starts low, increases linearly during the warm-up phase,
+        and then decreases following a cosine annealing schedule. Hyperparameters
+        for the optimizer (learning rate, betas, weight decay) and the scheduler
+        (warm-up percentage, division factors) are sourced from the model's
+        configuration (`self.config`).
+
+        Returns:
+            dict: A dictionary containing the configured optimizer and
+                  learning rate scheduler, formatted for use with PyTorch Lightning.
+                  The dictionary includes the optimizer instance under the key
+                  "optimizer" and the scheduler configuration under "lr_scheduler".
+        """
 
         # Divide params in decay and non-decay
         param_dict = {pn: p for pn, p in self.named_parameters()}
@@ -288,14 +513,18 @@ class GPT2(pl.LightningModule):
             },
         }
     
-    
     @torch.no_grad()
     def generate(
         self,
         input_ids: torch.Tensor,
+        pipeline: str,              # "diffusion" / "arm"
         max_new_tokens: int,
-        temperature:int=1.0,
-        top_k:float=None
+        temperature: float,
+        top_k: int,
+        do_sample: bool = None,
+        repetition_penalty: float = None,
+        denoising_strategy: str = None,    # "random" / "entropy"
+        diffusion_steps: int = None
     )->list[torch.Tensor]:
         """
         Samples from the model according to the specified pipeline. 
@@ -305,25 +534,33 @@ class GPT2(pl.LightningModule):
         stage of the diffusion process.
         When pipeline is arm, the list has length 1.
         """
-        if self.config["pipeline"] == "arm":
+        if pipeline == "arm":
+            assert do_sample is not None
+            assert repetition_penalty is not None
             genconfig = GenerationConfig(
                 max_new_tokens = max_new_tokens,
                 temperature=temperature,
-                top_k=top_k
+                top_k=top_k,
             )
+            
             out = self.gpt2.generate(
                 inputs=input_ids,
                 generation_config=genconfig,
-
+                do_sample=do_sample,
+                repetition_penalty= repetition_penalty,
             )
             return [out]
         
-        elif self.config["pipeline"] == "diffusion":
+        elif pipeline == "diffusion":
+            assert diffusion_steps is not None
+            assert denoising_strategy is not None
             xs = self.generate_diffusion(
                 input_ids,
-                max_new_tokens,
-                temperature,
-                top_k
+                max_new_tokens = max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
+                denoising_strategy=denoising_strategy,
+                diffusion_steps = diffusion_steps
             )
             return xs
         
@@ -336,7 +573,9 @@ class GPT2(pl.LightningModule):
         input_ids,
         max_new_tokens,
         temperature,
-        top_k
+        top_k,
+        denoising_strategy:str,      # "random", "entropy"
+        diffusion_steps: int,
     ):
         """
         Generate text using diffusion process.
@@ -365,20 +604,17 @@ class GPT2(pl.LightningModule):
         # [B, seq_len]
         x[:, :prompt_len] = input_ids
         
-        # Number of diffusion steps
-        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
-        
         # Number of tokens to be denoised at each step
-        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        n_tokens_per_step = math.ceil(1 / diffusion_steps * max_new_tokens)
         
         # Full attention mask for inference
-        attn_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        attention_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
         
         # To store intermediate steps
         xs = [x.clone()]
 
         # Gradually unmask tokens
-        for step in range(num_steps, 0, -1):
+        for step in range(diffusion_steps, 0, -1):
             
             # Get masked positions
             mask = (x == self.config["mask_id"])
@@ -393,7 +629,7 @@ class GPT2(pl.LightningModule):
                     input_ids=x,
                     targets=None,
                     input_mask=None,
-                    attn_mask=attn_mask
+                    attention_mask=attention_mask
                 )
             
             # Apply temperature and optional top-k sampling
@@ -422,32 +658,46 @@ class GPT2(pl.LightningModule):
                  dim=1
             )
 
-            # Compute entropy for each position (along the vocabulary)
-            entropy = -torch.sum(
-                probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
-                axis = -1
-            )
+            # Get indices of tokens to be denoised
+            if denoising_strategy == "random":
+                # Choose n_tokens_per_step at random among the masked ones
+                step_mask = torch.zeros_like(mask).to(torch.bool)
+                for b in range(step_mask.shape[0]):
+                    nonzero = mask[b].nonzero().flatten().numpy()
+                    np.random.shuffle(nonzero)
+                    idx = nonzero[:n_tokens_per_step].tolist()
+                    step_mask[b, idx] = True
 
-            # Deal with right shift in the entropy computation
-            # probs at position i refer to (i+1)-th token in the output
-            entropy = torch.cat(
-                [entropy[:, 0:1], entropy[:, :-1]],
-                 dim=1
-            )
-            # Set tokens not to be predicted at +inf
-            entropy[~mask] = torch.inf
+            elif denoising_strategy == "entropy":
+                # Compute entropy for each position (along the vocabulary)
+                entropy = -torch.sum(
+                    probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
+                    axis = -1
+                )
 
-            # Get the most confident predictions (lowest entropy)
-            _, idx_to_denoise = torch.topk(
-                entropy,
-                k=n_tokens_per_step,
-                dim=-1,
-                largest=False
-            )
+                # Deal with right shift in the entropy computation
+                # probs at position i refer to (i+1)-th token in the output
+                entropy = torch.cat(
+                    [entropy[:, 0:1], entropy[:, :-1]],
+                        dim=1
+                )
+                # Set tokens not to be predicted at +inf
+                entropy[~mask] = torch.inf
 
-            # Transform indices to mask
-            step_mask = torch.zeros_like(mask)
-            step_mask.scatter_(1, idx_to_denoise, True)
+                # Get the most confident predictions (lowest entropy)
+                _, idx_to_denoise = torch.topk(
+                    entropy,
+                    k=n_tokens_per_step,
+                    dim=-1,
+                    largest=False
+                )
+
+                # Transform indices to mask
+                step_mask = torch.zeros_like(mask)
+                step_mask.scatter_(1, idx_to_denoise, True)
+            else:
+                print("Denoising strategy must be one of [\"random\", \"entropy\"].")
+                exit()
 
             # Only predict masked tokens with highest confidence
             mask = mask & step_mask
@@ -459,6 +709,252 @@ class GPT2(pl.LightningModule):
             xs.append(x.clone())
             
         return xs
+
+    def eval_forward(
+        self,
+        input_ids,
+        src_mask,
+    ):
+        """
+        Evaluate a sentence using the model. In this case the originally masked tokens are at the end of the sentence.
+        Returns perplexity (lower is better)
+        """
+        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
+        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.eval()
+        input_ids = input_ids.to(device)
+        # Get dimensions
+        B = input_ids.shape[0]
+        assert(B == 1) # just for now
+        seq_len = input_ids.shape[1]
+        
+        # Start with fully masked sequence for the new tokens
+        max_new_tokens = src_mask.shape[1] - torch.sum(src_mask[0]).item()
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
+        
+        # (id, ..., id, msk, ..., msk)
+        # [B, seq_len]
+        x = torch.where(src_mask == 1, input_ids, x)
+        
+        # Number of diffusion steps
+        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
+        
+        # Number of tokens to be denoised at each step
+        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        
+        # Full attention mask for inference
+        attention_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        
+        # To store intermediate steps
+        xs = [x.clone()]
+        logit_score = 0.0
+
+        accumulate_probas = torch.full((B, seq_len), -1.0, device=device)
+
+        # Gradually unmask tokens
+        for step in range(num_steps, 0, -1):
+            
+            # Get masked positions
+            mask = (x == self.config["mask_id"])
+
+            # Exit when generation is completed
+            if not torch.any(mask):
+                break
+            
+            # Forward pass to get predictions
+            with torch.no_grad():
+                logits, _ = self.forward(
+                    input_ids=x,
+                    targets=None,
+                    input_mask=None,
+                    attention_mask=attention_mask
+                )
+            
+            # da capire se possono andare sotto zero
+            positional_probas = torch.full((B, seq_len), -1.0, device=device)
+            probas = torch.softmax(logits, dim=-1)
+            for i in range(seq_len):
+                if mask[0][i]:
+                    positional_probas[0][i] = (probas[:, i, input_ids[:, i]].item())
+            
+            # print("positional_logits:", positional_logits)
+            
+
+
+            # Get the most confident predictions (lowest entropy)
+            probas_to_denoise, idx_to_denoise = torch.topk(
+                positional_probas,
+                k=n_tokens_per_step,
+                dim=-1,
+                largest=True
+            )
+            logit_score += torch.sum(probas_to_denoise)
+            
+            # Add probas_to_denoise to accumulate_probas
+            for i, idx in enumerate(idx_to_denoise[0]):
+                accumulate_probas[0, idx] = probas_to_denoise[0, i]
+            
+
+            # Transform indices to mask
+            step_mask = torch.zeros_like(mask)
+            step_mask.scatter_(1, idx_to_denoise, True)
+
+            # Only predict masked tokens with highest confidence
+            mask = mask & step_mask
+            
+            # Update the tokens that were masked
+            x = torch.where(mask, input_ids, x)
+            # print(f"x[{step}]:", x)
+            # Keep track of diffusion process
+            xs.append(x.clone())
+
+        # Compute perplexity on accumulate_probas, considering only nonnegative values
+        valid_probas = accumulate_probas[0][accumulate_probas[0] >= 0]
+        assert(valid_probas.shape[0] == max_new_tokens)
+        perplexity = torch.exp(-torch.mean(torch.log(valid_probas)))
+        return perplexity.item()
+
+    def generate_infilling(
+        self,
+        input_ids,
+        src_mask,
+        temperature,
+        top_k
+    ):
+        """
+        Generate text using diffusion process.
+        It fills in the masked tokens in the input sequence.
+        """
+
+        assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
+        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        device = 'cuda'
+        self.eval()
+        input_ids = input_ids.to(device)
+        # Get dimensions
+        B = input_ids.shape[0]
+        assert(B == 1) # just for now
+        seq_len = input_ids.shape[1]
+        
+        # Start with fully masked sequence for the new tokens
+        max_new_tokens = src_mask.shape[1] - torch.sum(src_mask[0]).item()
+        x = torch.full((B, seq_len), self.config["mask_id"], dtype=torch.long, device=device)
+        
+        # (id, ..., id, msk, ..., msk)
+        # [B, seq_len]
+        x = torch.where(src_mask == 1, input_ids, x)
+        
+        # Number of diffusion steps
+        num_steps = self.config.get("diffusion_steps", max(64, max_new_tokens // 4)) 
+        
+        # Number of tokens to be denoised at each step
+        n_tokens_per_step = math.ceil(1 / num_steps * max_new_tokens)
+        
+        # Full attention mask for inference
+        attention_mask = get_annealing_mask(seq_len, B, 1.0).to(x.device)
+        
+        # To store intermediate steps
+        xs = [x.clone()]
+
+
+        # Gradually unmask tokens
+        for step in range(num_steps, 0, -1):
+            
+            # Get masked positions
+            mask = (x == self.config["mask_id"])
+
+            # Exit when generation is completed
+            if not torch.any(mask):
+                break
+            
+            # Forward pass to get predictions
+            with torch.no_grad():
+                logits, _ = self.forward(
+                    input_ids=x,
+                    targets=None,
+                    input_mask=None,
+                    attention_mask=attention_mask
+                )
+            
+            # Apply temperature and optional top-k sampling
+            logits = logits / temperature
+            if top_k is not None:
+                v, _ = torch.topk(
+                    input = logits,
+                    k = min(top_k, logits.size(-1)),
+                    dim=-1
+                )
+                logits[logits < v[:, :, [-1]]] = -float('Inf')
+            
+            # Convert to probabilities
+            probs = torch.softmax(logits, dim=-1)
+
+            # Sample from the distribution
+            next_tokens = torch.multinomial(
+                probs.view(-1, probs.size(-1)), 
+                num_samples=1
+            ).view(B, seq_len)
+            
+            # Right shift
+            # [0, 1, 2, 3, ..., n] -> [0, 0, 1, 2, ..., n-1]
+            next_tokens = torch.cat(
+                [next_tokens[:,0:1], next_tokens[:, :-1]],
+                 dim=1
+            )
+            
+            denoising_strategy = self.config.get("denoising_strategy", "random")
+            # Get indices of tokens to be denoised
+            if denoising_strategy == "random":
+                # Choose n_tokens_per_step at random among the masked ones
+                step_mask = torch.zeros_like(mask).to(torch.bool)
+                for b in range(step_mask.shape[0]):
+                    nonzero = mask[b].nonzero().flatten().cpu().numpy()
+                    np.random.shuffle(nonzero)
+                    idx = nonzero[:n_tokens_per_step].tolist()
+                    step_mask[b, idx] = True
+
+            elif denoising_strategy == "entropy":
+                # Compute entropy for each position (along the vocabulary)
+                entropy = -torch.sum(
+                    probs * torch.log2(probs + 1e10),   # avoid log(0) when top k is set
+                    axis = -1
+                )
+
+                # Deal with right shift in the entropy computation
+                # probs at position i refer to (i+1)-th token in the output
+                entropy = torch.cat(
+                    [entropy[:, 0:1], entropy[:, :-1]],
+                        dim=1
+                )
+                # Set tokens not to be predicted at +inf
+                entropy[~mask] = torch.inf
+
+                # Get the most confident predictions (lowest entropy)
+                _, idx_to_denoise = torch.topk(
+                    entropy,
+                    k=n_tokens_per_step,
+                    dim=-1,
+                    largest=False
+                )
+
+                # Transform indices to mask
+                step_mask = torch.zeros_like(mask)
+                step_mask.scatter_(1, idx_to_denoise, True)
+            else:
+                print("Denoising strategy must be one of [\"random\", \"entropy\"].")
+                exit()
+
+            # Only predict masked tokens with highest confidence
+            mask = mask & step_mask
+            
+            # Update the tokens that were masked
+            x = torch.where(mask, next_tokens, x)
+
+            # Keep track of diffusion process
+            xs.append(x.clone())
+            
+        return xs[-1]
 
     def test_eos_prediction(self, prompt_tokens, eos_token_id, pad_token_id, num_samples=100):
         """
@@ -491,8 +987,8 @@ class GPT2(pl.LightningModule):
             mask[0, prompt_len:] = True
             
             # Make prediction
-            attn_mask = get_annealing_mask(seq_len, B, 1.0).to(self.device)  # Full attention for testing
-            logits, _ = self.forward(input_ids, input_ids, mask, attn_mask)
+            attention_mask = get_annealing_mask(seq_len, B, 1.0).to(self.device)  # Full attention for testing
+            logits, _ = self.forward(input_ids, input_ids, mask, attention_mask)
             
             # Get prediction probabilities for masked positions
             probs = torch.softmax(logits[0, prompt_len:], dim=-1)
@@ -503,7 +999,7 @@ class GPT2(pl.LightningModule):
             # Check if EOS has highest probability at any position
             predicted_tokens = torch.argmax(logits[0, prompt_len:], dim=-1).cpu().numpy()
             has_eos = eos_token_id in predicted_tokens
-            eos_pos = np.argmax(eos_probs) if has_eos else -1
+            # eos_pos = np.argmax(eos_probs) if has_eos else -1
             
             eos_predictions.append(has_eos)
             eos_confidences.append(np.max(eos_probs))
@@ -517,3 +1013,24 @@ class GPT2(pl.LightningModule):
             "avg_eos_confidence": avg_confidence,
             "eos_confidences": eos_confidences
         }
+    
+    @classmethod
+    def from_pretrained(self, path_to_ckpt):
+        """
+        Loads a model from a .ckpt file.
+        It needs the corresponding config.json to live in the same folder.
+        """
+        # Check the config.json exists in the parent dir
+        config_path = os.path.join(
+            os.path.dirname(path_to_ckpt),
+            "config.json"
+        )
+        assert os.path.exists(config_path)
+        
+        # Load the model
+        model = GPT2.load_from_checkpoint(
+            path_to_ckpt,
+            config_path = config_path
+        )
+        print(f"Successfully loaded weights from {path_to_ckpt}")
+        return model

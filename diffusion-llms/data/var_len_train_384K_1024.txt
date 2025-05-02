@@ -1,0 +1,10 @@
+Variable Length Dataset (Fixed Structure)
+Generated on: 30-04-2025 22:55:01
+Using: $ python improved_prepare_var_len.py 1000 ../local_config.json
+Total number of tokens: 384,300
+Number of samples: 1000
+Context length: 1024
+Average text length: 384.30
+EOS token id: 50256
+PAD token id: 50257
+Format: [text tokens] [50256] [50257, ..., 50257]

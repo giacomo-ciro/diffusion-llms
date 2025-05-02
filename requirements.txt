@@ -5,3 +5,4 @@ numpy
 tiktoken
 datasets
 transformers
+evaluate
