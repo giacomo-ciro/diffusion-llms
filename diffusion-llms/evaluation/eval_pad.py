@@ -6,7 +6,7 @@ import sys
 import argparse
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-import wandb # Import wandb
+import wandb
 import tiktoken
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score # For metrics
 
@@ -18,7 +18,6 @@ sys.path.append(parent_dir)
 from model import GPT2
 from utils import get_annealing_mask # Although not directly used for generation logic here
 
-# --- Direct Dataset Class ---
 class DirectMemmapTestDataset(Dataset):
     """Loads data directly from a specified memmap file for testing."""
     def __init__(self, memmap_path: str, context_length: int, config_dir: str):
@@ -44,7 +43,6 @@ class DirectMemmapTestDataset(Dataset):
         # Also return the numpy array for easier ground truth handling
         return X_tensor, X
 
-# --- Evaluation Function ---
 def evaluate_final_padding(config: dict, device: str):
     """
     Evaluates the model's ability to generate correct padding after the
@@ -55,7 +53,6 @@ def evaluate_final_padding(config: dict, device: str):
         device (str): The device to run evaluation on ('cuda', 'mps', or 'cpu').
     """
 
-    # --- Get parameters from config ---
     ckpt_path_rel = config.get("ckpt_path_for_eval")
     test_data_path_rel = config.get("test_data_path_for_eval")
     eval_batch_size = config.get("eval_batch_size", 8) # Use smaller batch for generation
@@ -76,8 +73,6 @@ def evaluate_final_padding(config: dict, device: str):
     wandb_run_name_suffix = config.get("wandb_eval_run_name_suffix", "-eval-padding") # Different suffix
     wandb_run_name = f"{wandb_run_name_base}{wandb_run_name_suffix}"
 
-
-    # --- Validate required parameters ---
     if any(v is None for v in [ckpt_path_rel, test_data_path_rel, eos_token_id, pad_token_id, mask_id, context_length]):
         print("[!] Error: One or more required parameters not found in config.")
         sys.exit(1)
@@ -85,7 +80,6 @@ def evaluate_final_padding(config: dict, device: str):
         print(f"[!] Error: Please update 'ckpt_path_for_eval' in the config file ({config_path_origin}).")
         sys.exit(1)
 
-    # --- Resolve paths ---
     config_dir = os.path.dirname(config_path_origin or '.')
     ckpt_path = os.path.join(config_dir, ckpt_path_rel) if not os.path.isabs(ckpt_path_rel) else ckpt_path_rel
     test_data_path = os.path.join(config_dir, test_data_path_rel) if not os.path.isabs(test_data_path_rel) else test_data_path_rel
@@ -100,7 +94,6 @@ def evaluate_final_padding(config: dict, device: str):
     print(f"EOS: {eos_token_id}, PAD: {pad_token_id}, Context: {context_length}")
     print(f"Generation settings: steps={diffusion_steps}, temp={temperature}, top_k={top_k}, strategy='{denoising_strategy}'")
 
-    # --- Initialize Tokenizer ---
     try:
         tokenizer = tiktoken.get_encoding("gpt2")
         eos_token_str = tokenizer.decode([eos_token_id])
@@ -111,8 +104,6 @@ def evaluate_final_padding(config: dict, device: str):
         eos_token_str = f"ID:{eos_token_id}"
         pad_token_str = f"ID:{pad_token_id}"
 
-
-    # --- Initialize WandB ---
     if log_to_wandb:
         try:
             wandb.init(project=wandb_project, name=wandb_run_name, config=config)
