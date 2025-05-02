@@ -1,6 +1,6 @@
 {
-  "pipeline": "arm",
-  "init_from":"",
+  "pipeline": "diffusion",
+  "init_from":"diffugpt",
   "memmap_path": "./data/train_7K.bin",
   "padded_dataset": false,
   "pad_masked_perc": 0.15,
