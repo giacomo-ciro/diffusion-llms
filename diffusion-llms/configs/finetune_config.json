@@ -5,7 +5,7 @@
     "resume_training": false,
 
     "_comment_data": "Using the variable length dataset",
-    "memmap_path": "./data/var_len_train_4M_1024.bin",
+    "memmap_path": "./data/02052025144934/var_len_train_4M_1024.bin",
     "padded_dataset": true,
     "pad_masked_perc": 0.15,
     "pad_annealing_steps": 100,
@@ -42,7 +42,7 @@
     "enable_checkpointing": true,
     "save_dir": "./checkpoints/",
     "wandb": true,
-    "run_name": "diffugpt-finetune-varlen-5k",
+    "run_name": "diffugpt-finetune-varlen",
     "project_name": "diffusion-llms",
 
     "_comment_gen": "Generation params (ignored by train/eval)",
@@ -57,8 +57,8 @@
     "denoising_strategy": "random",
 
     "_comment_eval": "Parameters below added/modified for eval_eos.py after fine-tuning",
-    "ckpt_path_for_eval": "../checkpoints/ymd_250501_HMS_13_08_36/epoch_0_ce_9.98.ckpt",
-    "test_data_path_for_eval": "./data/02052025121536/var_len_test_380K_1024.bin",
+    "ckpt_path_for_eval": "../checkpoints/ymd_250502_HMS_12_50_41/epoch_1_ce_5.31.ckpt",
+    "test_data_path_for_eval": "../data/02052025144934/var_len_test_380K_1024.bin",
     "eval_batch_size": 16,
     "wandb_eval": true,
     "wandb_eval_run_name_suffix": "-eval-eos"
