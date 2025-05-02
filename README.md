@@ -14,7 +14,7 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 
 ## TO-DO's
 - [ ] Measure performance (eos prediction accuracy, benchmarks) of pre-trained DiffuGPT before and after fine-tuning on dataset of (text + eos + pad)
-- [ ] Curriculum learning (gradually increase the pad_masked_perc from 0 to 0.5)
+- [ ] Curriculum learning on optimzer steps (currently is on samples, +1 every time a new sample is yielded)
 
 ### Sync 30/04/25
 - [ ] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
@@ -43,26 +43,101 @@ $ python -m pip install -r requirements.txt
 The `config.json` is the unique place where to specify hyper-parameters for all the tasks to perform. It handles the model instantiation logic, training and sampling procedure.
 
 ### Training
-To train, you first have to generate the training data and save it to a `np.memmap` object:
+To train, you first have to generate the training data from FineWeb dataset and save it to a `np.memmap` object:
 ```bash
 $ cd diffusion-llms/data
+```
+To create a unique memmap array of tokens, corresponding to the specified number of documents in the dataset, separated by the eos tokens:
+```bash
 $ python prepare.py 100
 ```
-Where we are specifying the number of documents to use from the FineWebDataset. This creates a unique memmap array of tokens, correspodning to the documents in the dataset separated by the eos tokens. We are nor ready to train. We specify the hyper-parameters in the `config.json` file and start training:
-
+Instead, to create a unique memmap array of tokens, corresponding to documents in the dataset, where each document is of the same length (pad token id is appended). In the `config.json` file you can specify the length of each document `context_length` and the `pad_token_id` to use for padding shorter documents. The attributes are useed to specify how man documents to use for training and testing. Two different memmap arrays are created with the train and test documents.
 ```bash
-$ cd diffusion-llms
+$ python prepare_var_len.py path/to/config.json --train 100 -test 10
+```
+Once the data is ready, we specify the path in the `config.json` together with the other hyper-params used for training and start training:
+```bash
+$ cd ..
 $ python train.py path/to/config.json
 ```
+Training can be conducted starting from:
+- Auto-regressive Model (scratch or GPT-2 checkpoint)
+- Diffusion Model (scratch or diffuGPT checkpoint)
+And using the pipeline:
+- Auto-regressive (predict next tokne, causal attention mask)
+- Diffusion (predict masked tokens, full-attention mask)
+When training with diffusion, you can specify the attention annealing schedule. When using a padded dataset, you can introduce a pad annealing schedule (to gradually mask pad tokens).
 
 ### Sampling
-We can sample using diffusion or autoregressive strategy from any model. We specify a combination of `pipeline` (diffusion or arm) and `init_from` keys in the `config.json`. Then we add the `user_prompt` and the generation arguments (top k, temperature, number of samples, diffusion steps). Then run:
+We can sample using diffusion or autoregressive strategy from any model. We specify a combination of `pipeline` (diffusion or arm) and `init_from` keys in the `config.json`. Then we add the `user_prompt` and the generation arguments (top k, temperature, denoising strategy etc.). Then run:
 ``` bash 
 $ cd diffusion-llms
 $ python sample.py path/to/config.json
 ```
 Notice that we can also generate using discrete diffusion from a arm gpt2, and the results will likely be bad.
 
+### Evaluation
+We can evaluate a diffusion model on standard benchmarks:
+```bash
+$ cd evaluation
+$ python eval.py lambda 100
+```
+Where we specify the benchmark to evaluate on and the number of documents in the benchmark to test.
+
+### Config.json
+```json
+{
+  "pipeline": "arm",                        // (str) The training/sampling pipeline to use (e.g., arm, regular, etc.)
+  "init_from":"",                           // (str) Model initialization checkpoint (empty for from scratch, "gpt2" for pretrained, or path to custom checkpoint)
+  "memmap_path": "./data/train_7K.bin",     // (str) Path to generated memmap.bin
+  "padded_dataset": false,                  // (bool) Whether the dataset has fixed-length chunks with padding
+  "pad_masked_perc": 0.15,                  // (float) Percentage of tokens among the masked ones which are pad
+  "pad_annealing_steps": 100,               // (int) Number of steps for linear schedule from 0 to pad_masked_perc
+  "context_length": 1024,                   // (int) Maximum sequence length for model input (if pad datset, the two should coincide)
+
+  "n_embd": 768,                            // (int) Embedding dimension size for model
+  "n_layer": 12,                            // (int) Number of transformer layers
+  "n_head": 12,                             // (int) Number of attention heads
+  "resume_training": false,                 // (bool) Whether to resume from previous training state (must provide .ckpt in "init_from")
+  
+  "attn_annealing_steps": 1000,             // (int) Number of steps for attention mask annealing
+  "mask_id": 10541,                         // (int) Token ID used for masking (must be < vocab size)
+  "eos_token_id": 50256,                    // (int) End-of-sequence token ID
+  "pad_token_id": 50257,                    // (int) Padding token ID (must be vocab size +1)
+
+  "n_epochs": 1,                            // (int) Number of training epochs
+  "n_steps": 100,                           // (int) Number of training steps per epoch (training samples / effective batch size)
+  "val_check_interval": 100,                // (int) Frequency of validation checks (steps)
+  "val_test_perc": 0.05,                    // (float) Percentage of data to use for validation
+
+  "batch_size": 8,                          // (int) Number of sequences per batch
+  "accumulate_grad": 16,                    // (int) Number of batches for gradient accumulation
+  "grad_clip": 1.0,                         // (float) Maximum gradient norm for gradient clipping
+
+  "betas": [0.9,0.95],                      // (list) Adam optimizer beta parameters
+  "weight_decay": 0.01,                     // (float) L2 regularization strength
+  "max_lr": 6e-4,                           // (float) Maximum learning rate
+  "warmup_pct": 0.1,                        // (float) Percentage of training steps (n_steps) for learning rate warmup
+  "div_factor": 25.0,                       // (float) Factor to divide max_lr by to get initial learning rate
+  "final_div_factor": 1e4,                  // (float) Factor to divide max_lr by to get final learning rate
+
+  "enable_checkpointing": true,             // (bool) Whether to save model checkpoints
+  "save_dir": "./checkpoints/",             // (str) Directory to save model checkpoints
+  "wandb": true,                            // (bool) Whether to use Weights & Biases for experiment tracking
+  "run_name": "gpt2-scratch-openwebtext",   // (str) Name of the experiment run for logging
+  "project_name": "diffusion-llms",         // (str) Project name for experiment organization in logging
+
+  "user_prompt": "Once upon a time",        // (str) Initial text prompt for generation
+  "n_samples": 1,                           // (int) Number of text samples to generate
+  "temperature": 1.0,                       // (float) Sampling temperature (higher = more random)
+  "max_new_tokens": 10,                     // (int) Maximum number of new tokens to generate
+  "top_k": null,                            // (int or null) Limit sampling to top k most likely tokens
+  "diffusion_steps": 4,                     // (int) Number of diffusion steps in the generation process
+  "repetition_penalty": 1.2,                // (float) Penalty for repeating tokens (higher = less repetition)
+  "do_sample": false,                       // (bool) Whether to use sampling (true) or greedy decoding (false)
+  "denoising_strategy": "random"            // (str) Strategy for denoising (e.g., random, deterministic, etc.)
+}
+```
 ## Misc
 1. Use own branch during development, together we handle merges.
 2. Duplicate `config.json`, rename to `local_config.json` (added to `.gitignore`) and use it to test locally.
