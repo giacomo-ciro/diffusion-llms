@@ -350,9 +350,10 @@ class GPT2(pl.LightningModule):
             prog_bar=True
         )
         self.log(
-            # Median token in the prediction (prediction = argmax of the logits)
+            # Median token in the prediction
+            # (prediction = argmax of the logits at masked position)
             "train/median_predicted_token",
-            torch.median(preds).item(),
+            torch.median(preds.flatten()[input_mask.flatten()]).item(),
             on_step=True,
             on_epoch=False,
             prog_bar=True
@@ -441,6 +442,7 @@ class GPT2(pl.LightningModule):
             prog_bar=True,  # Log to the progbar
         )
         preds = logits.argmax(dim=-1).flatten().cpu().numpy()
+        preds = preds[input_mask.flatten().cpu().numpy()]   # only at masked positions
         _, counts = np.unique(
             preds,
             return_counts = True
