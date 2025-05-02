@@ -1,11 +1,11 @@
 {
     "pipeline": "diffusion",
     "_comment_init": "Initialize from the baseline checkpoint created earlier",
-    "init_from": "UPDATE_THIS_PATH/checkpoints/ymd_.../epoch_..._ce_....ckpt",
+    "init_from": "../checkpoints/ymd_250501_HMS_00_48_29/epoch_0_ce_9.03.ckpt",
     "resume_training": false,
 
     "_comment_data": "Using the variable length dataset",
-    "memmap_path": "./data/02052025121536/var_len_train_38K_1024.bin",
+    "memmap_path": "./data/var_len_train_4M_1024.bin",
     "padded_dataset": true,
     "pad_masked_perc": 0.15,
     "pad_annealing_steps": 100,
@@ -57,7 +57,7 @@
     "denoising_strategy": "random",
 
     "_comment_eval": "Parameters below added/modified for eval_eos.py after fine-tuning",
-    "ckpt_path_for_eval": "UPDATE_THIS_AFTER_TRAINING/checkpoints/diffugpt-finetune-varlen-5k/ymd_.../best_model.ckpt",
+    "ckpt_path_for_eval": "../checkpoints/ymd_250501_HMS_13_08_36/epoch_0_ce_9.98.ckpt",
     "test_data_path_for_eval": "./data/02052025121536/var_len_test_380K_1024.bin",
     "eval_batch_size": 16,
     "wandb_eval": true,
