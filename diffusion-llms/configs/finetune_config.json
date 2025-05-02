@@ -41,7 +41,7 @@
     "_comment_log_save": "Logging and saving settings for fine-tuning",
     "enable_checkpointing": true,
     "save_dir": "./checkpoints/",
-    "wandb": true,
+    "wandb": false,
     "run_name": "diffugpt-finetune-varlen",
     "project_name": "diffusion-llms",
 

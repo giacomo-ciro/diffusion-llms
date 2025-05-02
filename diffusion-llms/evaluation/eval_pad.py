@@ -223,6 +223,12 @@ def evaluate_final_padding(config: dict, device: str):
 
             # Store flattened lists of 0s (non-PAD) and 1s (PAD) for metrics
             # Treat PAD as the "positive" class
+            # Make sure we're using numpy arrays with astype method, not PyTorch tensors
+            if isinstance(gt_padding_tokens, torch.Tensor):
+                gt_padding_tokens = gt_padding_tokens.cpu().numpy()
+            if isinstance(pred_padding_tokens, torch.Tensor):
+                pred_padding_tokens = pred_padding_tokens.cpu().numpy()
+            
             gt_is_pad = (gt_padding_tokens == pad_token_id).astype(int)
             pred_is_pad = (pred_padding_tokens == pad_token_id).astype(int)
 
