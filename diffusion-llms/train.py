@@ -2,7 +2,6 @@ import os
 import time
 import sys
 import json
-import wandb
 import lightning as pl
 from model import GPT2
 from datamodule import MemmapDataModule
@@ -27,41 +26,50 @@ def main():
 
     # Setup logging
     if config["wandb"]:
-        wandb.login()
-        run = wandb.init(
-            project=config["project_name"],
-            config=config,
+        logger = WandbLogger(
             name=config["run_name"] if config["run_name"] else None,
+            project=config["project_name"]
         )
-        logger = WandbLogger(project=config["project_name"])
+        logger.experiment.config.update(config)
+
     else:
         logger = CSVLogger(save_dir=".")
 
     # Load the datamodule
     datamodule = MemmapDataModule(CONFIG_PATH)
 
-    # Instantiate a model
-    model = GPT2(CONFIG_PATH)
+    # Instantiate a model (new or pretrained)
+    if os.path.exists(config["init_from"]):
+        model = GPT2.from_pretrained(config["init_from"])
+    else:
+        model = GPT2(CONFIG_PATH)
 
     # Checkpointers
     if config["enable_checkpointing"]:
+        
+        # Unique folder for this run
         dirpath = config["save_dir"] + time.strftime("ymd_%y%m%d_HMS_%H_%M_%S")
+        
+        # Create also the save_dir folder if not exist
+        os.makedirs(dirpath)
+        
+        # Create checkpointer object
         checkpointer = ModelCheckpoint(
             dirpath=dirpath,  # Directory to save checkpoints
             filename='epoch_{epoch}_ce_{valid/loss:.2f}',            # Checkpoint filename format
-            save_top_k=-1,                                                          # Save the 3 best models
+            save_top_k=3,                                                          # Save the 3 best models
             monitor='valid/loss',                                                     # Metric to monitor
             mode='min',                                                             # Mode ('min' for loss, 'max' for accuracy)
             auto_insert_metric_name=False,
         )
+        
         # Save model config
-        os.mkdir(dirpath)
         with open(os.path.join(dirpath, "config.json"), "w") as f:
             json.dump(config, f, indent = 2)
 
     # Early Stopping
     early_stopping = EarlyStopping(
-        monitor='valid/loss',             # Monitor validation cross-entropy loss
+        monitor='valid/loss',           # Monitor validation cross-entropy loss
         patience=2,                     # Number of validation checks with no improvement after which training will stop
         min_delta=0.001,                # Minimum change in monitored value to qualify as improvement
         mode='min',                     # We want to minimize the loss
@@ -88,6 +96,8 @@ def main():
     )
 
     # Train
+    # Epoch 0:  43%|▍| 378/883 [...
+    #                   ^^ number of forward calls (if accumulate_grad == 1, then it coincides with optimizer steps)
     trainer.fit(
         model,
         datamodule,

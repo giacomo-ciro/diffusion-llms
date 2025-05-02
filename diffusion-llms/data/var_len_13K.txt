@@ -1,5 +1,0 @@
-Variable Length Dataset
-Generated on: 16-04-2025 15:42:13
-Using: $ python prepare_var_len.py 50 ../../min_config.json
-Total number of tokens: 12,800
-Format: [prompt tokens] [answer tokens] [EOS token=50256] [PAD tokens=50256]

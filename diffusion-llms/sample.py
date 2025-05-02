@@ -1,5 +1,6 @@
 import sys
 import json
+import os
 
 import torch
 import tiktoken
@@ -22,22 +23,37 @@ tokenizer= tiktoken.get_encoding("gpt2")
 mask_token = tokenizer.decode([config["mask_id"]])
 
 # Get prompt
-input_ids = torch.tensor(
-    [50256] + tokenizer.encode(config["user_prompt"])
-).unsqueeze(0)
+if config["user_prompt"]:
+    input_ids = torch.tensor(
+       [50256] + tokenizer.encode(config["user_prompt"])
+    ).unsqueeze(0)
+else:
+    input_ids = torch.tensor(
+        [50256]
+    ).unsqueeze(0)
 
-# Load model
-model = GPT2(CONFIG_PATH)
-
+# Instantiate a model (new or pretrained)
+if os.path.exists(config["init_from"]):
+    model = GPT2.from_pretrained(config["init_from"])
+else:
+    model = GPT2(CONFIG_PATH)
+    
 # Generate
-for _ in range(config["n_samples"]):
+n = config["n_samples"]
+print(f"\nGenerating {n} samples...\n")
+for _ in range(n):
     
     # List of tensors of shape (B, seq_len)
     xs = model.generate(
-        input_ids, 
-        max_new_tokens=config.get("max_new_tokens", 128),
-        temperature=config.get("temperature"),
-        top_k=config.get("top_k")
+        input_ids = input_ids,
+        max_new_tokens = config["max_new_tokens"],
+        temperature = config["temperature"],
+        top_k = config["top_k"],
+        do_sample = config["do_sample"],
+        repetition_penalty = config["repetition_penalty"],
+        denoising_strategy= config["denoising_strategy"],
+        pipeline=config["pipeline"],
+        diffusion_steps=config["diffusion_steps"]
     )
 
     # Illustrate the diffusion process
@@ -46,4 +62,5 @@ for _ in range(config["n_samples"]):
             x[0].tolist()
         ).replace(mask_token, "<mask>")
         print(out)
+        print()
     print("-"*89)
