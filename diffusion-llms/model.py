@@ -324,7 +324,11 @@ class GPT2(pl.LightningModule):
             targets == self.config["pad_token_id"],
             input_mask
         )
-
+        is_masked_and_non_pad = torch.logical_and(
+            targets != self.config["pad_token_id"],
+            input_mask
+        )
+        predicted_pad = preds == self.config["pad_token_id"]
         self.log(
             # Cross entropy loss of the token prediction task
             "train/loss",
@@ -382,6 +386,20 @@ class GPT2(pl.LightningModule):
                 torch.flatten(
                     (preds == targets)
                 )[is_masked_and_pad.flatten()].to(torch.float16)
+            ).item(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            # False positive
+            # (how many of the predicted pad are wrong)
+            # (might be nan when only pad are masked)
+            "train/pad_false_positives",
+            torch.mean(
+                torch.flatten(
+                    (predicted_pad)
+                )[is_masked_and_non_pad.flatten()].to(torch.float16)
             ).item(),
             on_step=True,
             on_epoch=False,
