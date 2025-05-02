@@ -1,5 +1,0 @@
-Generated on: 01-05-2025 17:58:09
-        Using: $ python prepare.py 100
-        Tot number of tokens: 71,939
-        dtype: <class 'numpy.uint16'>
-        

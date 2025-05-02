@@ -1,4 +1,0 @@
-Generated on: 24-04-2025 22:08:58
-        Using: $ python prepare.py 100
-        Tot number of tokens: 113,471
-        
