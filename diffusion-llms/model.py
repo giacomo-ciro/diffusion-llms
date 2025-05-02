@@ -626,7 +626,7 @@ class GPT2(pl.LightningModule):
 
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
         assert temperature > 0
-        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        #assert input_ids[0,0] == 50256  # <|endoftext|> token
 
         self.eval()
         input_ids = input_ids.to(self.device)
@@ -702,7 +702,7 @@ class GPT2(pl.LightningModule):
                 # Choose n_tokens_per_step at random among the masked ones
                 step_mask = torch.zeros_like(mask).to(torch.bool)
                 for b in range(step_mask.shape[0]):
-                    nonzero = mask[b].nonzero().flatten().numpy()
+                    nonzero = mask[b].nonzero().flatten().cpu().numpy()
                     np.random.shuffle(nonzero)
                     idx = nonzero[:n_tokens_per_step].tolist()
                     step_mask[b, idx] = True
@@ -759,7 +759,7 @@ class GPT2(pl.LightningModule):
         Returns perplexity (lower is better)
         """
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
-        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        #assert input_ids[0,0] == 50256  # <|endoftext|> token
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.eval()
         input_ids = input_ids.to(device)
@@ -867,7 +867,7 @@ class GPT2(pl.LightningModule):
         """
 
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
-        assert input_ids[0,0] == 50256  # <|endoftext|> token
+        #assert input_ids[0,0] == 50256  # <|endoftext|> token
         device = 'cuda'
         self.eval()
         input_ids = input_ids.to(device)

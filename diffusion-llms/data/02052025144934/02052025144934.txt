@@ -1,0 +1,24 @@
+Metadata for Test / Train Datasets 02052025144934
+
+Generated on: 02052025144934
+Using: $ python prepare_var_len.py --config ../config.json --train 10000 --test 1000
+
+Total Checked Samples: 25982
+
+== Train ==
+Valid (target): 10000 (10000)
+Text Tokens: 7,755,688
+Tot Tokens: 10,240,000
+Average Text Tokens per Sample: 775.57
+
+== Test ==
+Valid (target): 1000 (1000)
+Text Tokens: 7,755,688
+Tot Tokens: 1,024,000
+Average Text Tokens per Sample: 759.83
+
+== Hyper-params ==
+EOS token id: 50256
+PAD token id: 50257
+Format: [text tokens] [50256] [50257, ..., 50257]
+

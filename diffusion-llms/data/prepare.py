@@ -15,7 +15,7 @@ else:
     print("Please, provide sample size. For example, run \"python prepare.py 100\"")
     sys.exit()
 
-num_proc = os.cpu_count()
+#num_proc = os.cpu_count()
 
 # full datast takes 54GB in huggingface .cache dir, about 8M documents (8,013,769)
 # dataset = load_dataset(

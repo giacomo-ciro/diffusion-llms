@@ -8,6 +8,7 @@ total tokens (of which some are true text tokens and others are eos+pad...).
 import time
 import os
 import json
+
 from tqdm import tqdm
 import numpy as np
 import tiktoken
@@ -39,8 +40,9 @@ puid_folder = os.path.join(
 
 # Get tokenizer
 enc = tiktoken.get_encoding("gpt2")
+# however, we will define some special tokens to tackle the variable length
 eos_token_id = enc.eot_token  # Usually 50256 for GPT-2
-pad_token_id = config.get("pad_token_id", 50257)  # Use a specific pad token if defined
+pad_token_id = 50257
 context_length = config.get("context_length", 256)
 
 print(f"context_length: {context_length}")
