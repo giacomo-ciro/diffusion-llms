@@ -319,6 +319,12 @@ class GPT2(pl.LightningModule):
         )
         
         # Logging
+        preds = logits.argmax(dim=-1).flatten()
+        is_masked_and_pad = torch.logical_and(
+            targets == self.config["pad_token_id"],
+            input_mask
+        ).flatten()
+
         self.log(
             # Cross entropy loss of the token prediction task
             "train/loss",
@@ -346,7 +352,7 @@ class GPT2(pl.LightningModule):
         self.log(
             # Median token in the prediction (prediction = argmax of the logits)
             "train/median_predicted_token",
-            torch.median(logits.argmax(dim=-1)).item(),
+            torch.median(preds).item(),
             on_step=True,
             on_epoch=False,
             prog_bar=True
@@ -362,7 +368,20 @@ class GPT2(pl.LightningModule):
         self.log(
             # Percentage of masked tokens that are pad ones
             "train/pad_masked_perc",
-            torch.mean((targets[input_mask] == self.config["pad_token_id"]).to(torch.float16)).item(),
+            torch.mean(is_masked_and_pad.to(torch.float16)).item(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            # Accuracy in predicting pad token 
+            # (might be nan when no pad is masked)
+            "train/pad_accuracy",
+            torch.mean(
+                torch.flatten(
+                    (preds == targets)
+                )[is_masked_and_pad].to(torch.float16)
+            ).item(),
             on_step=True,
             on_epoch=False,
             prog_bar=True

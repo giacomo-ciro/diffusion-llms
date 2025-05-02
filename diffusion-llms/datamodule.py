@@ -71,6 +71,10 @@ class MemmapTokenDataset(Dataset):
 
         # If diffusion, compute the mask
         if self.is_diffusion_training:
+
+            # Otherwise it is the first token of the next chunk
+            y[-1] = self.pad_token_id
+            
             # Random mask for the output sequence
             # of shape # (context_length,)
             t = torch.rand(1).item()
