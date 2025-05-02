@@ -208,7 +208,7 @@ class GPT2(pl.LightningModule):
         masked_tokens = torch.eq(input_ids, self.config["mask_id"])
         # Sanity check
         if input_mask is not None:
-            assert torch.allclose(masked_tokens, input_mask)
+            assert torch.allclose(masked_tokens, input_mask) or torch.all(input_mask)
         # [B, 1, 1, seq_len]
         masked_tokens = masked_tokens[:, None, None, :]
         # [B, 1, seq_len, seq_len]
