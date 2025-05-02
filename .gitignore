@@ -6,5 +6,5 @@
 */wandb/
 */local_config*
 *.ckpt
-*/.DS_Store
+.DS_Store
 */checkpoints/.DS_Store
