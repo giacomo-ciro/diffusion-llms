@@ -1107,7 +1107,7 @@ class GPT2(pl.LightningModule):
         
         # Load the model
         model = GPT2.load_from_checkpoint(
-            path_to_ckpt,
+            checkpoint_path = path_to_ckpt,
             config_path = config_path
         )
         print(f"Successfully loaded weights from {path_to_ckpt}")
