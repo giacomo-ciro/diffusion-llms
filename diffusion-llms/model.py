@@ -288,6 +288,7 @@ class GPT2(pl.LightningModule):
         
         # Logging
         self.log(
+            # Cross entropy loss of the token prediction task
             "train/loss",
             loss,
             on_step=True,
@@ -295,6 +296,7 @@ class GPT2(pl.LightningModule):
             prog_bar=True
         )
         self.log(
+            # Learning rate (onecycle schedule)
             "train/learning_rate",
             self.optimizers().param_groups[0]['lr'],
             on_step=True,
@@ -302,6 +304,7 @@ class GPT2(pl.LightningModule):
             prog_bar=True
         )
         self.log(
+            # Percentage of tokens masked in the input
             "train/masked_inputs_perc",
             input_mask.sum().item() / input_mask.numel(),
             on_step=True,
@@ -309,6 +312,7 @@ class GPT2(pl.LightningModule):
             prog_bar=True
         )
         self.log(
+            # Median token in the prediction (prediction = argmax of the logits)
             "train/median_predicted_token",
             torch.median(logits.argmax(dim=-1)).item(),
             on_step=True,
@@ -316,8 +320,17 @@ class GPT2(pl.LightningModule):
             prog_bar=True
         )
         self.log(
+            # Percentage of attention mask = True (~0.5 for lower tril, 1.0 for full attention)
             "train/non_zero_mask",
             attention_mask.sum().item() / attention_mask.numel(),
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True
+        )
+        self.log(
+            # Percentage of masked tokens that are pad ones
+            "train/pad_masked_perc",
+            torch.mean((targets[input_mask] == self.config["pad_token_id"]).to(torch.float16)).item(),
             on_step=True,
             on_epoch=False,
             prog_bar=True
@@ -353,6 +366,7 @@ class GPT2(pl.LightningModule):
         
         # Logging
         self.log(
+            # Cross entropy loss (as for training)
             "valid/loss",
             loss,
             on_step=False,  # Logs the metric at the current step
@@ -368,6 +382,7 @@ class GPT2(pl.LightningModule):
         entropy = - np.sum(probs * np.log2(probs))
         max_entropy_perc = entropy / np.log2(len(preds))
         self.log(
+            # Entropy in the predictions (how disperse, to detect flat prediction)
             "valid/predictions_entropy_perc",
             max_entropy_perc,
             on_epoch=True,
