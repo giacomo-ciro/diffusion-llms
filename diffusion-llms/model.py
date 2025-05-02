@@ -22,13 +22,35 @@ replace_attention_mask()
 
 class GPT2(pl.LightningModule):
     """
-    Wraps the GPT2LMHeadModel class from HuggingFace, and adapts to Lightning framework.
+    Wraps the GPT2LMHeadModel class from HuggingFace, and adapts it to Lightning framework.
     """
 
     def __init__(
         self,
         config_path,
     ):
+        """
+        Initializes the GPT2 LightningModule.
+
+        This constructor performs the following steps:
+        1. Loads the model configuration from the specified JSON file (`config_path`).
+        2. Initializes the underlying GPT-2 model based on the `init_from` setting
+           in the configuration. This can be:
+           - A standard Hugging Face GPT-2 variant ('gpt2', 'gpt2-medium', etc.).
+           - A pre-trained DiffuGPT model ('diffugpt').
+           - A new GPT-2 model initialized from scratch (if `init_from` is not
+             one of the above or is explicitly set to initialize from scratch).
+        3. If the configured pipeline is 'diffusion' and `attn_annealing_steps` > 0,
+           it sets up a linear annealing schedule (`self.annealing_schedule`) for
+           the attention mask. This schedule determines the probability of unmasking
+           attention entries at each training step during the annealing phase.
+        4. If a `pad_token_id` is specified in the configuration (expected to be 50257),
+           it extends the model's vocabulary and embedding layers to accommodate this
+           additional token using the `extend_vocab` method.
+
+        Args:
+            config_path (str): Path to the JSON configuration file for the model.
+        """
         super().__init__()
 
         # Load configuration file
@@ -62,16 +84,15 @@ class GPT2(pl.LightningModule):
         if self.config["pad_token_id"]:
             assert self.config["pad_token_id"] == 50257
             self.extend_vocab()
-    
 
     def init_diffugpt(self):
         """
-        Load the pre-trained DiffuGPT:
-            1. Init a new gpt2 from scratch
-            2. Download DiffuGPT weights from HF
-            3. Rename accordingly
-            4. Load the weights and check match (wte & lm_head are tied)
-            5. Add a new row in the embedding matrix
+        Loads the pre-trained DiffuGPT:
+            1. Initializes a new gpt2 from scratch
+            2. Downloads DiffuGPT weights from HF
+            3. Renames it accordingly
+            4. Loads the weights and checks match (wte & lm_head are tied)
+            5. Adds a new row in the embedding matrix
         """
         from huggingface_hub import hf_hub_download
         from safetensors.torch import load_file
@@ -121,7 +142,7 @@ class GPT2(pl.LightningModule):
             pretrained: str=None,
         ):
         """
-        Init a gpt2 model from scratch or from HF checkpoint.
+        Initializes a gpt2 model from scratch or from HF checkpoint.
         """
 
         if pretrained:
@@ -182,7 +203,7 @@ class GPT2(pl.LightningModule):
         attention_mask:torch.Tensor      # [B, 1, context_length, context_length]    to be broadcasted to keys, querys, values
     ) -> tuple:
         """
-        Compute the logits for the given input_ids. 
+        Computes the logits for the given input_ids. 
         If targets are provided computes the loss.
         It requires attention_mask to be always specified.
 
@@ -194,7 +215,6 @@ class GPT2(pl.LightningModule):
             - attention_mask (torch.Tensor[bool]): the broadcastable attention mask of shape [B, 1, seq_len, seq_len]. 
             (b, 0, i, j) = True means the i-th token in the b-th batch can attent to
             the j-th token in the b-th batch. 
-        
         """
 
         # -- Deal with the Attention Matrix
@@ -255,6 +275,18 @@ class GPT2(pl.LightningModule):
         return logits, loss
 
     def training_step(self, batch, batch_idx):
+        """
+        Performs a single training step.
+        This method processes a batch of data, performs a forward pass through the model,
+        calculates the loss, logs various training metrics, and returns the loss.
+        It handles different attention masking strategies (annealing for diffusion, causal for ARM)
+        based on the configuration.
+        Args:
+            batch: A tuple containing input_ids, targets, and input_mask tensors.
+            batch_idx: The index of the current batch.
+        Returns:
+            torch.Tensor: The calculated loss for the training step.
+        """
         
         # Read in batch
         input_ids, targets, input_mask = batch        
@@ -339,6 +371,22 @@ class GPT2(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """
+        Performs a single validation step.
+        This method processes a batch of validation data. It handles attention mask
+        creation based on the configured pipeline (diffusion or standard causal).
+        For the diffusion pipeline, it masks input tokens according to `input_mask`
+        and uses a fully visible attention mask (annealing factor 1.0).
+        For other pipelines, it uses a standard causal attention mask.
+        It then performs a forward pass to compute the loss and logits.
+        The validation loss and the entropy of the model's predictions
+        (as a percentage of the maximum possible entropy) are logged.
+        Args:
+            batch: A tuple containing input_ids, targets, and input_mask.
+            batch_idx: The index of the current batch.
+        Returns:
+            The computed loss for the batch.
+        """
         
         # Read in batch
         input_ids, targets, input_mask = batch
@@ -393,13 +441,33 @@ class GPT2(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        # create optim groups. Any parameters that is 2D will be weight decayed, 
-        # otherwise no. i.e. all weight tensors in matmuls + embeddings decay, 
-        # all biases and layernorms don't.
-        # Layer normalization parameters and biases already have limited
-        # degrees of freedom, so they don't need regularization as much 
-        # as weight matrices do. This approach has been shown empirically 
-        # to lead to better convergence and model performance.
+        """
+        Configures the optimizer and learning rate scheduler for the model.
+
+        This method sets up the AdamW optimizer and a OneCycleLR learning rate
+        scheduler. It follows the common practice of applying weight decay only
+        to parameters with 2 or more dimensions (typically weight matrices and
+        embeddings), while excluding biases and Layer Normalization parameters
+        (which have fewer dimensions) from weight decay. This separation is
+        achieved by creating two parameter groups.
+
+        Layer normalization parameters and biases already have a limited number of
+        degrees of freedom, so they don't need regularization as much as weight
+        matrices do. This approach has been shown empirically to lead to better
+        convergence and model performance.
+
+        The learning rate starts low, increases linearly during the warm-up phase,
+        and then decreases following a cosine annealing schedule. Hyperparameters
+        for the optimizer (learning rate, betas, weight decay) and the scheduler
+        (warm-up percentage, division factors) are sourced from the model's
+        configuration (`self.config`).
+
+        Returns:
+            dict: A dictionary containing the configured optimizer and
+                  learning rate scheduler, formatted for use with PyTorch Lightning.
+                  The dictionary includes the optimizer instance under the key
+                  "optimizer" and the scheduler configuration under "lr_scheduler".
+        """
 
         # Divide params in decay and non-decay
         param_dict = {pn: p for pn, p in self.named_parameters()}
@@ -444,7 +512,6 @@ class GPT2(pl.LightningModule):
                 "frequency": 1,  # Check after each step
             },
         }
-    
     
     @torch.no_grad()
     def generate(
