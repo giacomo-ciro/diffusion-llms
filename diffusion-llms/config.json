@@ -1,10 +1,8 @@
 {
-  "pipeline": "arm",
-  "init_from":"",
+  "pipeline": "diffusion",
+  "init_from":"diffugpt",
   "memmap_path": "./data/train_7K.bin",
   "padded_dataset": false,
-  "pad_masked_perc": 0.15,
-  "pad_annealing_steps": 100,
   "context_length": 1024,
   
   "n_embd": 768,
@@ -12,18 +10,18 @@
   "n_head": 12, 
   "resume_training":false,
   
-  "attn_annealing_steps": 1000,
+  "attn_annealing_steps": 0,
   "mask_id": 10541,
   "eos_token_id": 50256,
   "pad_token_id": 50257,
 
   "n_epochs": 1,
-  "n_steps": 100,
-  "val_check_interval": 100,
+  "n_steps": 4000,
+  "val_check_interval": 1000,
   "val_test_perc": 0.05,
 
   "batch_size": 8,
-  "accumulate_grad": 16,
+  "accumulate_grad": 1,
   "grad_clip":1,
 
   "betas": [0.9,0.95],
@@ -33,10 +31,10 @@
   "div_factor":25.0,
   "final_div_factor":1e4,
 
-  "enable_checkpointing": true,
+  "enable_checkpointing": false,
   "save_dir": "./checkpoints/",
   "wandb": true,
-  "run_name": "gpt2-scratch-openwebtext",
+  "run_name": "diffugpt-pretrained-finewebtext",
   "project_name": "diffusion-llms",
 
   "user_prompt": "Once upon a time",
