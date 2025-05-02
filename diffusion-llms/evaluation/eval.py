@@ -496,6 +496,7 @@ def main():
     device = get_device()
     model = GPT2(CONFIG_PATH)
     model = torch.compile(model).to(device)
+    model.eval()
 
     if EVALUATION_TYPE == "lambada":
         eval_Lambada(model, tokenizer, config, MAX_ITER)
