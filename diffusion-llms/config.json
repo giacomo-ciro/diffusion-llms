@@ -3,6 +3,7 @@
   "init_from":"diffugpt",
   "memmap_path": "./data/train_7K.bin",
   "padded_dataset": false,
+  "use_eos_head": true,
   "pad_masked_perc": 0.15,
   "pad_annealing_steps": 100,
   "context_length": 1024,
