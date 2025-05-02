@@ -1,34 +1,41 @@
 """
 Stream the FineWeb dataset from HF, find samples with context_length 
-tokens and save them to a contiguous np.memmap, with appropriate 
-padding so they all have context_length total tokens (of which some are
-true text tokens and others are eos+pad...).
+tokens and save them to two contiguous np.memmap, one for train and 
+the other for test, with appropriate padding so they all have context_length 
+total tokens (of which some are true text tokens and others are eos+pad...).
 """
 
 import time
-import sys
 import os
 import json
 from tqdm import tqdm
 import numpy as np
 import tiktoken
 from datasets import load_dataset
+import argparse
 
+# Name of this file
 this_script_name = os.path.basename(__file__)
 
 # Command line arguments
-if len(sys.argv) >= 3:
-    SAMPLE_SIZE = int(sys.argv[1])
-    CONFIG_PATH = sys.argv[2]
-    n = 3       # how many samples to inspect at the end
-else:
-    print("Usage: python {this_script_name} <SAMPLE_SIZE> <CONFIG_PATH>")
-    print("Example: python {this_script_name} 1000 ../config.json")
-    sys.exit()
+parser = argparse.ArgumentParser()
+parser.add_argument("config", type=str, help="path/to/config.json")
+parser.add_argument("-tr", "--train", type=int, default=10, help="Number of documents from FineWeb to build train dataset.")
+parser.add_argument("-te", "--test", type=int, default=1, help="Number of documents from FineWeb to build test dataset.")
+parser.add_argument("-n", type=int, default=3, help="How many samples to inspect at the end.")
+args = parser.parse_args()
 
 # Load configuration
-with open(CONFIG_PATH, "r") as f:
+with open(args.config, "r") as f:
     config = json.load(f)
+
+# Unique ID for this pre-processing job
+puid = time.strftime("%d%m%Y%H%M%S")
+os.mkdir(f"{puid}")
+puid_folder = os.path.join(
+    os.path.dirname(__file__),
+    f"{puid}"
+)
 
 # Get tokenizer
 enc = tiktoken.get_encoding("gpt2")
@@ -39,20 +46,21 @@ context_length = config.get("context_length", 256)
 print(f"context_length: {context_length}")
 print(f"EOS token ID: {eos_token_id}")
 print(f"PAD token ID: {pad_token_id}")
+print(f"Train documents: {args.train}")
+print(f"Test documents: {args.test}")
 
 # Create a synthetic dataset from openwebtext
 # We'll use existing text as both prompts and answers
 dataset = load_dataset(
     "HuggingFaceFW/fineweb",    
     # "CC-MAIN-2013-20",  
-    split = "train",
+    split = "train",        # unfortunately, only train available...otherwise it would have been easier to prepare trian/test
     streaming=True,
     trust_remote_code=True,
 ).shuffle(
     buffer_size=10_000,
     seed = 42,
 )
-# ).take(SAMPLE_SIZE)  
 
 def process(example):
     ids = enc.encode_ordinary(example['text'])
@@ -69,33 +77,62 @@ tokenized = dataset.map(
 # Go through the dataset and store all the samples 
 # shorter than context_length
 print("Counting valid samples...")
-tot_len = 0
-valid_samples = 0
+tot_len_train = 0
+tot_len_test = 0
+valid_samples_train = 0
+valid_samples_test = 0
 checked_samples = 0
 pbar = tqdm(tokenized, desc = "Counting valid samples", unit="samples")
 for sample in pbar:
+
+    # Keep track of checked samples
     checked_samples += 1
+    
+    # When we find something useful
     if sample["len"] < context_length:
-        tot_len += sample["len"]
-        valid_samples += 1
+
+        # First fill in train
+        if valid_samples_train < args.train:
+            tot_len_train += sample["len"]
+            valid_samples_train += 1
+        # Then fill in test
+        else:
+            tot_len_test += sample["len"]
+            valid_samples_test += 1
 
     # Update progress bar
     pbar.set_postfix(
-        valid_samples = f"{valid_samples:,}"
+        valid_samples_train = f"{valid_samples_train:,}",
+        valid_samples_test = f"{valid_samples_test:,}"
     )
 
     # Stop when we have enough samples
-    if valid_samples == SAMPLE_SIZE:
+    if valid_samples_test >= args.test:
         break
 
 # Print some information about the first sweep
-if valid_samples == 0:
+if valid_samples_train == 0:
     print(f"[!] No samples found with context length = {context_length}.")
     exit()
-print(f"Found {valid_samples} samples out of {checked_samples} with < {context_length} tokens")
-print(f"Number of text tokens in final dataset: {tot_len:,}")
-print(f"Number of total tokens in final dataset: {valid_samples * context_length:,}")
-print(f"Average text tokens per sample: {tot_len / valid_samples:,.2f}")
+
+# Stats of just performed check
+print(f"""
+Checked: {checked_samples}
+
+== Train ==
+Valid (target): {valid_samples_train} ({args.train})
+Text Tokens: {tot_len_train:,}
+Tot Tokens: {valid_samples_train * context_length:,}
+Average Text Tokens per Sample: {tot_len_train / valid_samples_train:,.2f}
+
+== Test ==
+Valid (target): {valid_samples_test} ({args.test})
+Text Tokens: {tot_len_test:,}
+Tot Tokens: {valid_samples_test * context_length:,}
+Average Text Tokens per Sample: {tot_len_test / valid_samples_test:,.2f}
+
+"""
+)
 
 # Format the name of the memmap file
 def format_file_size(tot_len):
@@ -107,71 +144,128 @@ def format_file_size(tot_len):
         return f'{tot_len/1e6:.0f}M'
     else:
         return f'{tot_len/1e9:.0f}B'
-filename = f'var_len_train_{format_file_size(tot_len)}_{context_length}'
-memmap_path = os.path.join(
-    os.path.dirname(__file__),
-    f"{filename}.bin"
-)
+
+# Dtype
 memmap_dtype = np.uint16
 
-# Create memmap object
-arr = np.memmap(
-    memmap_path,
+# train
+filename_train = f'var_len_train_{format_file_size(tot_len_train)}_{context_length}'
+memmap_path_train = os.path.join(
+    puid_folder,
+    f"{filename_train}.bin"
+)
+arr_train = np.memmap(
+    memmap_path_train,
     dtype=memmap_dtype,
     mode='w+',
-    shape=(context_length * valid_samples,)     # blocks of context_length
+    shape=(context_length * valid_samples_train,)     # blocks of context_length
+)
+
+# Test
+filename_test = f'var_len_test_{format_file_size(tot_len_test)}_{context_length}'
+memmap_path_test = os.path.join(
+    puid_folder,
+    f"{filename_test}.bin"
+)
+arr_test = np.memmap(
+    memmap_path_test,
+    dtype=memmap_dtype,
+    mode='w+',
+    shape=(context_length * valid_samples_test,)     # blocks of context_length
 )
 
 # Go through the dataset again and save the tokens with appropriate padding
 idx = 0
-valid_samples = 0
+valid_samples_train = 0
+valid_samples_test = 0
 pbar = tqdm(tokenized, desc = "Saving valid samples", unit="samples")
 for sample in pbar:
-
+        # Keep track of checked samples
+    checked_samples += 1
+    
+    # When we find something useful
     if sample["len"] < context_length:
+
+        # Check correct build
         assert sample["ids"][-1] == eos_token_id
+
+        # Get data
         sample_len = sample["len"]
         sample_padded = sample["ids"] + [pad_token_id] * (context_length - sample_len)
+
+        # First fill in train
+        if valid_samples_train < args.train:
+            arr = arr_train
+            tot_len_train += sample_len
+            valid_samples_train += 1
+        # Then fill in test
+        else:
+            arr = arr_test
+            idx = 0 if valid_samples_test == 0 else idx # reset index
+            tot_len_test += sample_len
+            valid_samples_test += 1
+
+        # Copy to correct array
+        assert idx < len(arr)
         arr[idx: idx+context_length] = np.array(sample_padded, dtype=memmap_dtype)
         idx += context_length
         arr.flush()
 
-        # Stop when enough samples found
-        valid_samples += 1
-    
     # Update progress bar
     pbar.set_postfix(
-        valid_samples = f"{valid_samples:,}"
+        valid_samples_train = f"{valid_samples_train:,}",
+        valid_samples_test = f"{valid_samples_test:,}"
     )
 
-    # Stop when reached enough
-    if valid_samples == SAMPLE_SIZE:
+    # Stop when we have enough samples
+    if valid_samples_test >= args.test:
         break
 
 # Write metadata file with statistics
-with open(os.path.join(os.path.dirname(__file__), f'{filename}.txt'), "w") as f:
+metadata_path = os.path.join(
+    puid_folder,
+    f'{puid}.txt'
+)
+with open(metadata_path, "w") as f:
     f.write(
-f"""Variable Length Dataset (Fixed Structure)
-Generated on: {time.strftime("%d-%m-%Y %H:%M:%S")}
-Using: $ python {this_script_name} {SAMPLE_SIZE} {CONFIG_PATH}
-Total number of tokens: {tot_len:,}
-Number of samples: {SAMPLE_SIZE}
-Context length: {context_length}
-Average text length: {tot_len / valid_samples:,.2f}
+f"""Metadata for Test / Train Datasets {puid}
+
+Generated on: {puid}
+Using: $ python {this_script_name} --config {args.config} --train {args.train} --test {args.test}
+
+Total Checked Samples: {checked_samples}
+
+== Train ==
+Valid (target): {valid_samples_train} ({args.train})
+Text Tokens: {tot_len_train:,}
+Tot Tokens: {valid_samples_train * context_length:,}
+Average Text Tokens per Sample: {tot_len_train / valid_samples_train:,.2f}
+
+== Test ==
+Valid (target): {valid_samples_test} ({args.test})
+Text Tokens: {tot_len_train:,}
+Tot Tokens: {valid_samples_test * context_length:,}
+Average Text Tokens per Sample: {tot_len_test / valid_samples_test:,.2f}
+
+== Hyper-params ==
 EOS token id: {eos_token_id}
 PAD token id: {pad_token_id}
 Format: [text tokens] [{eos_token_id}] [{pad_token_id}, ..., {pad_token_id}]
-"""
-)
 
-print(f"Variable length dataset saved as {filename}.bin")
+"""
+    )
+
+print()
+print(f"Train saved to {memmap_path_train}")
+print(f"Test saved to {memmap_path_train}")
+print(f"Metadata saved to {metadata_path}")
 
 # Inspect generated data
-print("Inspecting generated memmap...")
-arr = np.memmap(memmap_path, dtype=memmap_dtype, mode='r')
+print("Inspecting generated train memmap...")
+arr = np.memmap(memmap_path_train, dtype=memmap_dtype, mode='r')
 
 # Random chunk (multiples of context_len)
-idx = np.random.randint(0, valid_samples, size=(n,), dtype=int) * context_length
+idx = np.random.randint(0, valid_samples_train, size=(args.n,), dtype=int) * context_length
 
 # Print the text
 for i in idx:
@@ -182,4 +276,13 @@ for i in idx:
     print(
         enc.decode(sample)
     ) 
-print("Done!")
+
+print(
+"""
+The job is done!
+Don\'t worry if you get \"Fata Python Error\" after this message...I don't know why it happens
+        
+        ~ Jack :)
+        
+"""
+)
