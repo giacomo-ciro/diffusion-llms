@@ -275,7 +275,7 @@ class GPT2(pl.LightningModule):
         else:
             logits = self.gpt2.lm_head(
                 transformer_output
-            ).logits
+            )
 
         # If targets provided, compute loss
         if targets is not None:
