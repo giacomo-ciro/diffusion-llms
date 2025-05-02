@@ -147,6 +147,10 @@ $ python
 >>> import wandb
 >>> wandb.login()
 ```
+Re-installing some packages fixed an issue with FineWeb streaming:
+```bash
+$ python -m pip install --upgrade datasets huggingface-hub fsspec
+```
 
 ## Repository Structure
 ```bash
