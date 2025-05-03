@@ -1106,6 +1106,8 @@ class GPT2(pl.LightningModule):
         assert os.path.exists(config_path)
         
         # Load the model
+        # TODO: load weights manually 
+        # (to avoid initializing diffugpt from pretrained diffugpt)
         model = GPT2.load_from_checkpoint(
             checkpoint_path = path_to_ckpt,
             config_path = config_path
