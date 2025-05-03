@@ -37,7 +37,7 @@
     "enable_checkpointing": true,
     "save_dir": "./checkpoints/",
     "wandb": true,
-    "run_name": "diffugpt-varlen",
+    "run_name": "diffugpt-eospad",
     "project_name": "diffusion-llms",
   
     "user_prompt": "Once upon a time",
