@@ -57,7 +57,7 @@ def get_device():
     return device
 
 
-def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
+def eval_Lambada(model, tokenizer, config, max_iter=np.inf, verbose = False):
     print("Evaluating lambada...")
     print("Setting diffusion_steps = masked_num")
     start_time = time.time()
@@ -97,7 +97,8 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
             # if pred.strip() == line.split()[-1].strip():
             #     cor += 1
 
-            # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+            if verbose:
+                print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
             if total_cnt > max_iter:
                 break
     
@@ -116,7 +117,7 @@ def preprocess(text):
     return text
 
 
-def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
+def eval_hellaswag(model, tokenizer, config, max_iter=np.inf, verbose = False):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
     assert(not config.get("use_pad_head"))          # Must be False 
     from datasets import load_dataset
@@ -155,7 +156,8 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
 
         if pred == gold:
             cor += 1
-        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        if verbose:
+            print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
     
@@ -164,7 +166,7 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
     return ans
 
-def eval_wino(model, tokenizer, config, max_iter=np.inf):
+def eval_wino(model, tokenizer, config, max_iter=np.inf, verbose = False):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
     assert(not config.get("use_pad_head"))          # Must be False 
     from datasets import load_dataset
@@ -212,7 +214,8 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
 
         if pred == gold:
             cor += 1
-        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        if verbose:
+            print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
 
         if total_cnt >= max_iter:
             break
@@ -221,7 +224,7 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
     return ans
 
-def eval_piqa(model, tokenizer, config, max_iter=np.inf):
+def eval_piqa(model, tokenizer, config, max_iter=np.inf, verbose = False):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
     assert(not config.get("use_pad_head"))          # Must be False 
 
@@ -258,8 +261,8 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
 
         if pred == gold:
             cor += 1
-        # print(total_cnt, cor/total_cnt)
-        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        if verbose:
+            print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
     ans = cor / total_cnt
@@ -267,7 +270,7 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
     return ans
 
-def eval_siqa(model, tokenizer, config, max_iter=np.inf):
+def eval_siqa(model, tokenizer, config, max_iter=np.inf, verbose = False):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
     assert(not config.get("use_pad_head"))          # Must be False 
     print("Evaluating Social IQA...")
@@ -303,8 +306,8 @@ def eval_siqa(model, tokenizer, config, max_iter=np.inf):
 
         if pred == gold:
             cor += 1
-        # print(total_cnt, cor/total_cnt)
-        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        if verbose:
+            print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
     
@@ -313,7 +316,7 @@ def eval_siqa(model, tokenizer, config, max_iter=np.inf):
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
     return ans
 
-def eval_infilling(model, tokenizer, config, max_iter=np.inf):
+def eval_infilling(model, tokenizer, config, max_iter=np.inf, verbose = False):
     """It does infilling on the true sentence in the Story Cloze Test, generating the middle sentence given the first
     and last sentences and computes the rouge score between the generated and the true middle sentence.
     """
@@ -367,7 +370,8 @@ def eval_infilling(model, tokenizer, config, max_iter=np.inf):
         gens.append(pred)
         refs.append(middle)
 
-        # print(f"step {total_cnt} done")
+        if verbose:
+            print(f"step {total_cnt} done")
         if total_cnt == 1000:
             break
         if total_cnt >= max_iter:
@@ -395,7 +399,7 @@ def humaneval_infill(model, tokenizer):
     pass
 
 
-def eval_triva(model, tokenizer, config, max_iter=np.inf):
+def eval_trivia(model, tokenizer, config, max_iter=np.inf, verbose = False):
     from datasets import load_dataset
     print("Evaluating TriviaQA...")
     start_time = time.time()
@@ -446,7 +450,8 @@ def eval_triva(model, tokenizer, config, max_iter=np.inf):
 
         gens.append(pred)
         refs.append(labels)
-        # print(f"step {total_cnt} done")
+        if verbose:
+            print(f"step {total_cnt} done")
         if total_cnt >= max_iter:
             break
         if total_cnt == 2000:
@@ -543,7 +548,7 @@ def main():
         elif eval_type == "infilling":
             ans = eval_infilling(model, tokenizer, config, MAX_ITER)
         elif eval_type == "trivia":
-            ans = eval_triva(model, tokenizer, config, MAX_ITER)
+            ans = eval_trivia(model, tokenizer, config, MAX_ITER)
         payload[eval_type] = ans
     
     # Save args
