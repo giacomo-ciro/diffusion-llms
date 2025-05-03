@@ -489,7 +489,7 @@ def main():
     for i in EVALUATION_TYPE:
         if i == "all":
             # TODO: fix the rest
-            EVALUATION_TYPE = ["lambada", "hellaswag", "wino", "piqa","siqa", "trivia"]
+            EVALUATION_TYPE = ["lambada", "hellaswag", "wino", "piqa","siqa", "infilling", "trivia"]
             break
         if i not in {
             "lambada",
