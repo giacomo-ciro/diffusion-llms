@@ -1,0 +1,1 @@
+{"lambada": 0.21782178217821782, "hellaswag": 0.4, "wino": 0.5, "piqa": 0.55, "siqa": 0.36, "infilling": [6.882609230182929, 0.1176470588235294, 6.612143539432205], "trivia": 0.02, "model": "diffugpt", "pipeline": "diffusion", "iters": 100}

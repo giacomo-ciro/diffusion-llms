@@ -237,27 +237,27 @@ class GPT2(pl.LightningModule):
         assert len(attention_mask.shape) == 4
         attention_mask = attention_mask.to(self.device)
 
-        # 2. Update attn_mask to prevent tokens to look at masked ones
-        B, _, _, seq_len = attention_mask.shape
-        # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
-        masked_tokens = torch.eq(input_ids, self.config["mask_id"])
-        # Sanity check
-        if input_mask is not None:
-            assert torch.allclose(masked_tokens, input_mask) or torch.all(input_mask)
-        # [B, 1, 1, seq_len]
-        masked_tokens = masked_tokens[:, None, None, :]
-        # [B, 1, seq_len, seq_len]
-        masked_tokens = masked_tokens.expand(-1, -1, seq_len, -1)
-        # Silence the masked tokens (set to false in the attention mask)
-        attention_mask = attention_mask * (~masked_tokens)
-        # 3. Activate back the diagonal (tokens can attend to themselves)
-        # [seq_len, seq_len]
-        diagonal_mask = torch.eye(seq_len, dtype=torch.bool, device=self.device)
-        # [1, 1, seq_len, seq_len]
-        diagonal_mask = diagonal_mask[None, None, :, :]
-        # [B, 1, seq_len, seq_len]
-        diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
-        attention_mask = attention_mask | diagonal_mask
+        # # 2. Update attn_mask to prevent tokens to look at masked ones
+        # B, _, _, seq_len = attention_mask.shape
+        # # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
+        # masked_tokens = torch.eq(input_ids, self.config["mask_id"])
+        # # Sanity check
+        # if input_mask is not None:
+        #     assert torch.allclose(masked_tokens, input_mask) or torch.all(input_mask)
+        # # [B, 1, 1, seq_len]
+        # masked_tokens = masked_tokens[:, None, None, :]
+        # # [B, 1, seq_len, seq_len]
+        # masked_tokens = masked_tokens.expand(-1, -1, seq_len, -1)
+        # # Silence the masked tokens (set to false in the attention mask)
+        # attention_mask = attention_mask * (~masked_tokens)
+        # # 3. Activate back the diagonal (tokens can attend to themselves)
+        # # [seq_len, seq_len]
+        # diagonal_mask = torch.eye(seq_len, dtype=torch.bool, device=self.device)
+        # # [1, 1, seq_len, seq_len]
+        # diagonal_mask = diagonal_mask[None, None, :, :]
+        # # [B, 1, seq_len, seq_len]
+        # diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
+        # attention_mask = attention_mask | diagonal_mask
 
         # Forward pass
         transformer_output = self.gpt2.transformer(
@@ -276,6 +276,10 @@ class GPT2(pl.LightningModule):
             logits = self.gpt2.lm_head(
                 transformer_output
             )
+            # logits = self.gpt2.forward(
+            #     input_ids = input_ids,
+            #     attention_mask = attention_mask
+            # ).logits
 
         # If targets provided, compute loss
         if targets is not None:
@@ -667,7 +671,6 @@ class GPT2(pl.LightningModule):
         assert temperature > 0
         #assert input_ids[0,0] == 50256  # <|endoftext|> token
 
-        self.eval()
         input_ids = input_ids.to(self.device)
 
         # Get dimensions
