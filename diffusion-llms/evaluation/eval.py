@@ -117,6 +117,7 @@ def preprocess(text):
 
 def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
+    assert(config.get("use_eos_head") == False)          # Must be False 
     from datasets import load_dataset
     print("Evaluating HellaSwag...")
     start_time = time.time()
@@ -164,6 +165,7 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
 
 def eval_wino(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
+    assert(config.get("use_eos_head") == False)          # Must be False 
     from datasets import load_dataset
     print("Evaluating Winogrande...")
     start_time = time.time()
@@ -220,6 +222,8 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
 
 def eval_piqa(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
+    assert(config.get("use_eos_head") == False)          # Must be False 
+
     from datasets import load_dataset
     print("Evaluating PIQA...")
     start_time = time.time()
@@ -264,6 +268,7 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
 
 def eval_siqa(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
+    assert(config.get("use_eos_head") == False)          # Must be False 
     print("Evaluating Social IQA...")
     start_time = time.time()
     from datasets import load_dataset
@@ -516,7 +521,8 @@ def main():
         model = GPT2(CONFIG_PATH)
     
     # Compile and set to evaluation mode
-    model = torch.compile(model).to(device)
+    # model = torch.compile(model).to(device)
+    model = model.to(device)
     model.eval()
 
     # Run the required eval
