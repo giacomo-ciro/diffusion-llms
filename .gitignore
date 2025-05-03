@@ -5,6 +5,7 @@
 */evaluation/local_config*
 */wandb/
 */local_config*
+*/checkpoints
 *.ckpt
 .DS_Store
 */checkpoints/.DS_Store
