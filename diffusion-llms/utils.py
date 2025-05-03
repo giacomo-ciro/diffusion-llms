@@ -1,6 +1,31 @@
 import torch
 import sys
 
+def compute_binary_metrics(flat_preds, flat_targets):
+    """
+    Given 1d predictions and targets returns accuracy, recall, precision, f1.
+    """
+    # Calculate base metrics
+    correct_preds = torch.eq(flat_preds, flat_targets) 
+    tp = torch.sum(
+        correct_preds[flat_targets]
+    )
+    tn = torch.sum(
+        correct_preds[~flat_targets]
+    )
+    fp = torch.sum(
+        ~correct_preds[~flat_targets]
+    )
+    fn = torch.sum(
+        ~correct_preds[flat_targets]
+    )
+    accuracy = (tp + tn) / (tp + tn + fp + fn)
+    recall = tp / (tp + fn) if (tp + fn) > 0 else torch.tensor(0.0)
+    precision = tp / (tp + fp) if (tp + fp) > 0 else torch.tensor(0.0)
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else torch.tensor(0.0)
+
+    return accuracy, recall, precision, f1
+
 def get_annealing_mask(
         context_length:int,
         B:int,
@@ -21,7 +46,7 @@ def get_annealing_mask(
     expanded_mask = anneal_mask[None, None, :, :].expand(B, 1, context_length, context_length)
     return expanded_mask
 
-def get_causal_mask(\
+def get_causal_mask(
         context_length:int,
         B:int
     )-> torch.Tensor:

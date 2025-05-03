@@ -37,7 +37,10 @@ if os.path.exists(config["init_from"]):
     model = GPT2.from_pretrained(config["init_from"])
 else:
     model = GPT2(CONFIG_PATH)
-    
+
+# Set evaluation mode
+model.eval()
+
 # Generate
 n = config["n_samples"]
 print(f"\nGenerating {n} samples...\n")
