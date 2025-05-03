@@ -1,1 +1,1 @@
-{"lambada": 0.21782178217821782, "hellaswag": 0.4, "wino": 0.5, "piqa": 0.55, "siqa": 0.36, "infilling": [6.882609230182929, 0.1176470588235294, 6.612143539432205], "trivia": 0.02, "model": "diffugpt", "pipeline": "diffusion", "iters": 100}
+{"lambada": 0.19833106928003105, "hellaswag": 0.3150766779525991, "wino": 0.4964483030781373, "piqa": 0.5701849836779108, "siqa": 0.37717502558853633, "infilling": [7.380312655161209, 0.3844929089882314, 6.820871815012164], "trivia": 0.02312164857464385, "model": "diffugpt", "pipeline": "diffusion", "iters": Infinity}

@@ -151,10 +151,9 @@ def format_file_size(tot_len):
 memmap_dtype = np.uint16
 
 # train
-filename_train = f'var_len_train_{format_file_size(tot_len_train)}_{context_length}'
 memmap_path_train = os.path.join(
     puid_folder,
-    f"{filename_train}.bin"
+    "train.bin"
 )
 arr_train = np.memmap(
     memmap_path_train,
@@ -164,10 +163,9 @@ arr_train = np.memmap(
 )
 
 # Test
-filename_test = f'var_len_test_{format_file_size(tot_len_test)}_{context_length}'
 memmap_path_test = os.path.join(
     puid_folder,
-    f"{filename_test}.bin"
+    "test.bin"
 )
 arr_test = np.memmap(
     memmap_path_test,
@@ -237,6 +235,12 @@ Using: $ python {this_script_name} --config {args.config} --train {args.train} -
 
 Total Checked Samples: {checked_samples}
 
+== Hyper-params ==
+EOS token id: {eos_token_id}
+PAD token id: {pad_token_id}
+Format: [text tokens] [{eos_token_id}] [{pad_token_id}, ..., {pad_token_id}]
+Context Length: {context_length}
+
 == Train ==
 Valid (target): {valid_samples_train} ({args.train})
 Text Tokens: {tot_len_train:,}
@@ -248,11 +252,6 @@ Valid (target): {valid_samples_test} ({args.test})
 Text Tokens: {tot_len_train:,}
 Tot Tokens: {valid_samples_test * context_length:,}
 Average Text Tokens per Sample: {tot_len_test / valid_samples_test:,.2f}
-
-== Hyper-params ==
-EOS token id: {eos_token_id}
-PAD token id: {pad_token_id}
-Format: [text tokens] [{eos_token_id}] [{pad_token_id}, ..., {pad_token_id}]
 
 """
     )
