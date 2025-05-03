@@ -117,7 +117,7 @@ def preprocess(text):
 
 def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
-    assert(config.get("use_eos_head") == False)          # Must be False 
+    assert(not config.get("use_eos_head"))          # Must be False 
     from datasets import load_dataset
     print("Evaluating HellaSwag...")
     start_time = time.time()
@@ -165,7 +165,7 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
 
 def eval_wino(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
-    assert(config.get("use_eos_head") == False)          # Must be False 
+    assert(not config.get("use_eos_head"))          # Must be False 
     from datasets import load_dataset
     print("Evaluating Winogrande...")
     start_time = time.time()
@@ -222,7 +222,7 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
 
 def eval_piqa(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
-    assert(config.get("use_eos_head") == False)          # Must be False 
+    assert(not config.get("use_eos_head"))          # Must be False 
 
     from datasets import load_dataset
     print("Evaluating PIQA...")
@@ -268,7 +268,7 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
 
 def eval_siqa(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
-    assert(config.get("use_eos_head") == False)          # Must be False 
+    assert(not config.get("use_eos_head"))          # Must be False 
     print("Evaluating Social IQA...")
     start_time = time.time()
     from datasets import load_dataset
@@ -387,7 +387,7 @@ def eval_infilling(model, tokenizer, config, max_iter=np.inf):
     with open(f'ROCInfill_medium_t{config.get("diffusion_steps")}_tmp.jsonl', "w") as f:
         for json_obj in samples:
             f.write(json.dumps(json_obj) + "\n")
-
+    return results["rouge1"], results["rouge2"], results["rougeL"]
 
 def humaneval_infill(model, tokenizer):
     # not clear
@@ -489,7 +489,7 @@ def main():
     for i in EVALUATION_TYPE:
         if i == "all":
             # TODO: fix the rest
-            EVALUATION_TYPE = ["lambada", "wino", "siqa", "trivia"]
+            EVALUATION_TYPE = ["lambada", "hellaswag", "wino", "piqa","siqa", "trivia"]
             break
         if i not in {
             "lambada",
