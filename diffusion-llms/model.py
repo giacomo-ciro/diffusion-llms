@@ -283,6 +283,10 @@ class GPT2(pl.LightningModule):
             logits = self.gpt2.lm_head(
                 transformer_output
             )
+            # logits = self.gpt2.forward(
+            #     input_ids = input_ids,
+            #     attention_mask = attention_mask
+            # ).logits
 
         # If targets provided, compute loss
         if targets is not None:
