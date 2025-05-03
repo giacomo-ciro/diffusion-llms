@@ -26,6 +26,8 @@ Run the script from the command line with the following command:
 import sys
 import json
 import csv
+import os
+import argparse
 
 import evaluate
 import torch
@@ -97,11 +99,11 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
             print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
             if total_cnt > max_iter:
                 break
-    print("acc:", cor / total_cnt)
+    
+    ans = cor / total_cnt
+    print("acc:", ans)
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
-
-
-
+    return ans
 
 
 def preprocess(text):
@@ -154,10 +156,11 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
         print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
-
-    print("acc:", cor / total_cnt)
+    
+    ans = cor / total_cnt
+    print("acc:", ans)
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
-
+    return ans
 
 def eval_wino(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
@@ -210,10 +213,10 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
 
         if total_cnt >= max_iter:
             break
-
-    print("acc:", cor / total_cnt)
+    ans = cor / total_cnt
+    print("acc:", ans)
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
-
+    return ans
 
 def eval_piqa(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
@@ -254,10 +257,10 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
         print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
-
-    print("acc:", cor / total_cnt)
+    ans = cor / total_cnt
+    print("acc:", ans)
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
-
+    return ans
 
 def eval_siqa(model, tokenizer, config, max_iter=np.inf):
     assert(config.get("pipeline") == "diffusion")           # Implemented only for diffusion pipeline
@@ -298,9 +301,11 @@ def eval_siqa(model, tokenizer, config, max_iter=np.inf):
         print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
-
-    print("acc:", cor / total_cnt)
+    
+    ans = cor / total_cnt
+    print("acc:", ans)
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
+    return ans
 
 def eval_infilling(model, tokenizer, config, max_iter=np.inf):
     """It does infilling on the true sentence in the Story Cloze Test, generating the middle sentence given the first
@@ -312,7 +317,7 @@ def eval_infilling(model, tokenizer, config, max_iter=np.inf):
     device = get_device()
     assert config.get("pipeline") == "diffusion"
     problems = []
-    with open(f"evaluation/cloze_test_val__spring2016.csv") as f:
+    with open("evaluation/cloze_test_val__spring2016.csv") as f:
         reader = csv.reader(f)
         next(reader)
         for row in reader:
@@ -402,7 +407,7 @@ def eval_triva(model, tokenizer, config, max_iter=np.inf):
         query = f"{doc['context']}\nQuesion: {doc['question']}?\nAnswer: "
         labels = doc["answers"]["text"]
         encoded_labels = [
-            tokenizer.encode(l) for l in labels
+            tokenizer.encode(lab) for lab in labels
         ]  # , add_special_tokens=False)
         long_gold = max(encoded_labels, key=len)
 
@@ -422,11 +427,14 @@ def eval_triva(model, tokenizer, config, max_iter=np.inf):
             max_new_tokens=tokens,
             temperature=config.get("temperature"),
             top_k=config.get("top_k"),
+            pipeline = config.get("pipeline"),
+            diffusion_steps = tokens,    # as in diffugpt
+            denoising_strategy = config.get("denoising_strategy")
         )[-1]
         pred = tokenizer.decode(res.tolist()[0][len(prompt_id) - 1 :])
 
-        for l in labels:
-            if normalize_answer(l) in normalize_answer(pred.strip()):
+        for lab in labels:
+            if normalize_answer(lab) in normalize_answer(pred.strip()):
                 cor += 1
                 break
 
@@ -440,10 +448,11 @@ def eval_triva(model, tokenizer, config, max_iter=np.inf):
 
     print(gens)
     print(refs)
-    print("em acc:", cor / total_cnt)
+    ans = cor / total_cnt
+    print("em acc:", ans)
     print(compute_f1(gens, refs))
     print(f"speed: {(total_cnt - 1) / (time.time() - start_time):.3f} step/sec")
-
+    return ans
 
 def print_output(x, tokenizer, mask_token):
     print("-" * 89)
@@ -454,36 +463,41 @@ def print_output(x, tokenizer, mask_token):
 
 def main():
     # From the command line we can specify the config.file
-    if len(sys.argv) >= 3:
-        CONFIG_PATH = sys.argv[1]
-        EVALUATION_TYPE = sys.argv[2].lower()
-        MAX_ITER = int(sys.argv[3]) if len(sys.argv) > 3 else np.inf
-        print(
-            f"CONFIG_PATH = {CONFIG_PATH}\n"
-            f"EVALUATION_TYPE = {EVALUATION_TYPE}\n"
-            F"MAX_ITER = {MAX_ITER}"
-        )
-        
-    else:
-        print("Usage: python eval.py path/to/config.json <EVALUATION_TYPE> [max_iter]")
-        print("Available evaluation types: lambada, hellaswag, wino, piqa, siqa, infilling, trivia")
-        sys.exit(1)
+    parsers = argparse.ArgumentParser()
+    parsers.add_argument("config", type=str, help="path/to/config.json")
+    parsers.add_argument("-i", "--iters", type=int, default=float("inf"))
+    parsers.add_argument("-t", "--test", nargs='+', type=str, required=True, help='Benchmarks to test the model on (all to test all).')
+    args = parsers.parse_args()
+
+    CONFIG_PATH = args.config
+    EVALUATION_TYPE = args.test
+    MAX_ITER = args.iters
+    print(
+        f"CONFIG_PATH = {CONFIG_PATH}\n"
+        f"EVALUATION_TYPE = {EVALUATION_TYPE}\n"
+        F"MAX_ITER = {MAX_ITER}"
+    )
         
     with open(CONFIG_PATH, "r") as f:
         config = json.load(f)
 
-    if EVALUATION_TYPE not in {
-        "lambada",
-        "hellaswag",
-        "wino",
-        "piqa",
-        "siqa",
-        "infilling",
-        "trivia",
-    }:
-        print(f"Unknown evaluation type: {EVALUATION_TYPE}")
-        print("Available evaluation types: lambada, hellaswag, wino, piqa, siqa, infilling, trivia")
-        sys.exit(1)
+    for i in EVALUATION_TYPE:
+        if i == "all":
+            # TODO: fix the rest
+            EVALUATION_TYPE = ["lambada", "wino", "siqa", "trivia"]
+            break
+        if i not in {
+            "lambada",
+            "hellaswag",
+            "wino",
+            "piqa",
+            "siqa",
+            "infilling",
+            "trivia",
+        }:
+            print(f"Unknown evaluation type: {EVALUATION_TYPE}")
+            print("Available evaluation types: lambada, hellaswag, wino, piqa, siqa, infilling, trivia")
+            sys.exit(1)
 
     if config["pipeline"] != "diffusion":
         print("Evaluation implemented only for pipeline = diffusion.")
@@ -494,25 +508,45 @@ def main():
 
     # Load model
     device = get_device()
-    model = GPT2(CONFIG_PATH)
+    
+    # Instantiate a model (new or pretrained)
+    if os.path.exists(config["init_from"]):
+        model = GPT2.from_pretrained(config["init_from"])
+    else:
+        model = GPT2(CONFIG_PATH)
+    
+    # Compile and set to evaluation mode
     model = torch.compile(model).to(device)
     model.eval()
 
-    if EVALUATION_TYPE == "lambada":
-        eval_Lambada(model, tokenizer, config, MAX_ITER)
-    elif EVALUATION_TYPE == "hellaswag":
-        eval_hellaswag(model, tokenizer, config, MAX_ITER)
-    elif EVALUATION_TYPE == "wino":
-        eval_wino(model, tokenizer, config, MAX_ITER)
-    elif EVALUATION_TYPE == "piqa":
-        eval_piqa(model, tokenizer, config, MAX_ITER)
-    elif EVALUATION_TYPE == "siqa":
-        eval_siqa(model, tokenizer, config, MAX_ITER)
-    elif EVALUATION_TYPE == "infilling":
-        eval_infilling(model, tokenizer, config, MAX_ITER)
-    elif EVALUATION_TYPE == "trivia":
-        eval_triva(model, tokenizer, config, MAX_ITER)
-
+    # Run the required eval
+    payload = {}
+    for eval_type in EVALUATION_TYPE:
+        if eval_type == "lambada":
+            ans = eval_Lambada(model, tokenizer, config, MAX_ITER)
+        elif eval_type == "hellaswag":
+            ans = eval_hellaswag(model, tokenizer, config, MAX_ITER)
+        elif eval_type == "wino":
+            ans = eval_wino(model, tokenizer, config, MAX_ITER)
+        elif eval_type == "piqa":
+            ans = eval_piqa(model, tokenizer, config, MAX_ITER)
+        elif eval_type == "siqa":
+            ans = eval_siqa(model, tokenizer, config, MAX_ITER)
+        elif eval_type == "infilling":
+            ans = eval_infilling(model, tokenizer, config, MAX_ITER)
+        elif eval_type == "trivia":
+            ans = eval_triva(model, tokenizer, config, MAX_ITER)
+        payload[eval_type] = ans
+    
+    # Save args
+    payload["model"] = config["init_from"]
+    payload["pipeline"] = config["pipeline"]
+    payload["iters"] = MAX_ITER
+    
+    # When more than 1 evaluation save
+    if len(EVALUATION_TYPE) > 1:
+        with open(f"{int(time.time())}.json", "w") as f:
+            json.dump(payload, f)
 
 if __name__ == "__main__":
     main()
