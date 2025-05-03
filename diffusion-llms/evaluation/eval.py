@@ -28,6 +28,7 @@ import json
 import csv
 import os
 import argparse
+from tqdm import tqdm
 
 import evaluate
 import torch
@@ -66,7 +67,7 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
     mask_token = tokenizer.decode([config["mask_id"]])
 
     with open("evaluation/lambada_test_plain_text.txt", "r", encoding="utf-8") as file:
-        for line in file:
+        for line in tqdm(file):
             total_cnt += 1
             line = line.strip()
             x0 = (
@@ -96,7 +97,7 @@ def eval_Lambada(model, tokenizer, config, max_iter=np.inf):
             # if pred.strip() == line.split()[-1].strip():
             #     cor += 1
 
-            print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+            # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
             if total_cnt > max_iter:
                 break
     
@@ -129,7 +130,7 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
     total_cnt = 0
     cor = 0
 
-    for doc in ds:
+    for doc in tqdm(ds):
         total_cnt += 1
         if total_cnt % 1000 == 0:
             print("total cnt:", total_cnt)
@@ -154,7 +155,7 @@ def eval_hellaswag(model, tokenizer, config, max_iter=np.inf):
 
         if pred == gold:
             cor += 1
-        print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
     
@@ -182,7 +183,7 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
     total_cnt = 0
     cor = 0
 
-    for doc in ds:
+    for doc in tqdm(ds):
         total_cnt += 1
         idx = doc["sentence"].index("_")
         options = [doc["option1"], doc["option2"]]
@@ -211,7 +212,7 @@ def eval_wino(model, tokenizer, config, max_iter=np.inf):
 
         if pred == gold:
             cor += 1
-        print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
 
         if total_cnt >= max_iter:
             break
@@ -234,7 +235,7 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
     total_cnt = 0
     cor = 0
 
-    for doc in ds:
+    for doc in tqdm(ds):
         total_cnt += 1
 
         query = f"Question: {doc['goal']}\nAnswer: "
@@ -258,7 +259,7 @@ def eval_piqa(model, tokenizer, config, max_iter=np.inf):
         if pred == gold:
             cor += 1
         # print(total_cnt, cor/total_cnt)
-        print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
     ans = cor / total_cnt
@@ -279,7 +280,7 @@ def eval_siqa(model, tokenizer, config, max_iter=np.inf):
     total_cnt = 0
     cor = 0
 
-    for doc in ds:
+    for doc in tqdm(ds):
         total_cnt += 1
 
         query = f"Question: {doc['context']} {doc['question']}\nAnswer: "
@@ -303,7 +304,7 @@ def eval_siqa(model, tokenizer, config, max_iter=np.inf):
         if pred == gold:
             cor += 1
         # print(total_cnt, cor/total_cnt)
-        print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
+        # print(f"step {total_cnt} done. Accuracy: {cor/total_cnt:.4f}")
         if total_cnt >= max_iter:
             break
     
@@ -335,7 +336,7 @@ def eval_infilling(model, tokenizer, config, max_iter=np.inf):
     gens = []
     refs = []
 
-    for stories in problems:
+    for stories in tqdm(problems):
         total_cnt += 1
         prompt = stories[0] + " " + stories[1]
         suffix = stories[3] + " " + stories[4]
@@ -366,7 +367,7 @@ def eval_infilling(model, tokenizer, config, max_iter=np.inf):
         gens.append(pred)
         refs.append(middle)
 
-        print(f"step {total_cnt} done")
+        # print(f"step {total_cnt} done")
         if total_cnt == 1000:
             break
         if total_cnt >= max_iter:
@@ -407,7 +408,7 @@ def eval_triva(model, tokenizer, config, max_iter=np.inf):
     total_cnt = 0
     cor = 0
 
-    for doc in ds:
+    for doc in tqdm(ds):
         total_cnt += 1
         query = f"{doc['context']}\nQuesion: {doc['question']}?\nAnswer: "
         labels = doc["answers"]["text"]
@@ -445,7 +446,7 @@ def eval_triva(model, tokenizer, config, max_iter=np.inf):
 
         gens.append(pred)
         refs.append(labels)
-        print(f"step {total_cnt} done")
+        # print(f"step {total_cnt} done")
         if total_cnt >= max_iter:
             break
         if total_cnt == 2000:
