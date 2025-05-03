@@ -26,7 +26,7 @@ class MemmapTokenDataset(Dataset):
         self.is_padded_dataset = config["padded_dataset"]
         self.stride = config["context_length"] if self.is_padded_dataset else 1
         self.pad_masked_perc = config["pad_masked_perc"]
-        self.pad_annealing_steps = config["pad_annealing_steps"]
+        self.pad_annealing_samples = config["pad_annealing_samples"]
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
         total_positions = max(0, len(self.data) - (self.context_length + 1) + 1)
@@ -39,11 +39,11 @@ class MemmapTokenDataset(Dataset):
         # Anneal the pad tokens to be masked
         if (self.is_diffusion_training and
             self.is_padded_dataset and
-            self.pad_annealing_steps > 0):
+            self.pad_annealing_samples > 0):
             self.pad_annealing_schedule = np.linspace(
                 0,
                 self.pad_masked_perc,
-                self.pad_annealing_steps
+                self.pad_annealing_samples
             )
         self.cur_annealing_step = 0
             
@@ -83,7 +83,7 @@ class MemmapTokenDataset(Dataset):
             if self.is_padded_dataset:
                 
                 # handle the annealing
-                if self.cur_annealing_step < self.pad_annealing_steps:
+                if self.cur_annealing_step < self.pad_annealing_samples:
                     pad_masked_perc = self.pad_annealing_schedule[self.cur_annealing_step]
                     self.cur_annealing_step += 1
                 else:

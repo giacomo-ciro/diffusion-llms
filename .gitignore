@@ -1,6 +1,6 @@
 *.bin
 */lightning_logs/
-*/__pycache__/
+__pycache__
 */evaluation/__pycache__/
 */evaluation/local_config*
 */wandb/
@@ -8,4 +8,4 @@
 */checkpoints
 *.ckpt
 .DS_Store
-*/checkpoints/.DS_Store
+local_data

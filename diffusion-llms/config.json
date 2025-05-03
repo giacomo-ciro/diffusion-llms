@@ -3,9 +3,9 @@
   "init_from":"diffugpt",
   "memmap_path": "/home/3160499/diffusion-llms/diffusion-llms/data/02052025124125/var_len_train_4M_1024.bin",
   "padded_dataset": true,
-  "use_eos_head": true,
+  "use_pad_head": true,
   "pad_masked_perc": 0.05,
-  "pad_annealing_steps": 4500,
+  "pad_annealing_samples": 4500,
   "context_length": 1024,
   
   "n_embd": 768,

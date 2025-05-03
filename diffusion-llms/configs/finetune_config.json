@@ -8,7 +8,7 @@
     "memmap_path": "./data/02052025144934/var_len_train_4M_1024.bin",
     "padded_dataset": true,
     "pad_masked_perc": 0.15,
-    "pad_annealing_steps": 100,
+    "pad_annealing_samples": 100,
     "context_length": 1024,
 
     "_comment_model": "Model architecture should match the loaded checkpoint",

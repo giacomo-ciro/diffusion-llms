@@ -8,7 +8,7 @@ import lightning as pl
 from torch.optim.lr_scheduler import OneCycleLR
 from transformers import GPT2LMHeadModel, GPT2Config, GenerationConfig
 from attention_patch import replace_attention_mask
-from utils import get_annealing_mask, get_causal_mask
+from utils import get_annealing_mask, get_causal_mask, compute_binary_metrics
 
 # Modify the HF implementation so 
 # the attention mask provided is actually used
@@ -83,20 +83,27 @@ class GPT2(pl.LightningModule):
             
         # Extend the WTE and LM_HEAD if required
         if self.config["pad_token_id"]:
-            assert self.config["pad_token_id"] == 50257
-            self.extend_vocab()
+            assert self.config["pad_token_id"] <= 50257
+            if self.config["pad_token_id"] == 50257:
+                self.extend_vocab()
 
         # Initialize a new head for eos prediction
-        if self.config["use_eos_head"]:
-            # Freeze all other parameters (except wte of pad, eos and mask)
+        if self.config["use_pad_head"]:
+            # Freeze all parameters
             for param in self.gpt2.parameters():
                 param.requires_grad = False
             wte = self.gpt2.transformer.wte.weight
+            
+            # Unfreeze EOS / PAD embedding
             if self.config["pad_token_id"] == self.config["eos_token_id"]:
                 wte[-1].requires_grad = True
             else:
-                wte[-2:].requires_grad = True 
+                wte[-2].requires_grad = True 
+                wte[-2].requires_grad = True 
+            
+            # Unfreeze mask embedding
             wte[self.config["mask_id"]] = True
+            
             # Init new head to binary predict eos
             self.eos_head = torch.nn.Linear(self.gpt2.lm_head.in_features, 1)
 
@@ -237,27 +244,27 @@ class GPT2(pl.LightningModule):
         assert len(attention_mask.shape) == 4
         attention_mask = attention_mask.to(self.device)
 
-        # 2. Update attn_mask to prevent tokens to look at masked ones
-        B, _, _, seq_len = attention_mask.shape
-        # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
-        masked_tokens = torch.eq(input_ids, self.config["mask_id"])
-        # Sanity check
-        if input_mask is not None:
-            assert torch.allclose(masked_tokens, input_mask) or torch.all(input_mask)
-        # [B, 1, 1, seq_len]
-        masked_tokens = masked_tokens[:, None, None, :]
-        # [B, 1, seq_len, seq_len]
-        masked_tokens = masked_tokens.expand(-1, -1, seq_len, -1)
-        # Silence the masked tokens (set to false in the attention mask)
-        attention_mask = attention_mask * (~masked_tokens)
-        # 3. Activate back the diagonal (tokens can attend to themselves)
-        # [seq_len, seq_len]
-        diagonal_mask = torch.eye(seq_len, dtype=torch.bool, device=self.device)
-        # [1, 1, seq_len, seq_len]
-        diagonal_mask = diagonal_mask[None, None, :, :]
-        # [B, 1, seq_len, seq_len]
-        diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
-        attention_mask = attention_mask | diagonal_mask
+        # # 2. Update attn_mask to prevent tokens to look at masked ones
+        # B, _, _, seq_len = attention_mask.shape
+        # # [B, seq_len]    -> masked_tokens[b, i] = True means the i-th token of the b-th batch is masked
+        # masked_tokens = torch.eq(input_ids, self.config["mask_id"])
+        # # Sanity check
+        # if input_mask is not None:
+        #     assert torch.allclose(masked_tokens, input_mask) or torch.all(input_mask)
+        # # [B, 1, 1, seq_len]
+        # masked_tokens = masked_tokens[:, None, None, :]
+        # # [B, 1, seq_len, seq_len]
+        # masked_tokens = masked_tokens.expand(-1, -1, seq_len, -1)
+        # # Silence the masked tokens (set to false in the attention mask)
+        # attention_mask = attention_mask * (~masked_tokens)
+        # # 3. Activate back the diagonal (tokens can attend to themselves)
+        # # [seq_len, seq_len]
+        # diagonal_mask = torch.eye(seq_len, dtype=torch.bool, device=self.device)
+        # # [1, 1, seq_len, seq_len]
+        # diagonal_mask = diagonal_mask[None, None, :, :]
+        # # [B, 1, seq_len, seq_len]
+        # diagonal_mask = diagonal_mask.expand(B, 1, seq_len, seq_len)
+        # attention_mask = attention_mask | diagonal_mask
 
         # Forward pass
         transformer_output = self.gpt2.transformer(
@@ -267,7 +274,7 @@ class GPT2(pl.LightningModule):
 
         # Get logits
         # When only eos head
-        if self.config["use_eos_head"]:
+        if self.config["use_pad_head"]:
             logits = self.eos_head(
                 transformer_output
             )
@@ -294,10 +301,10 @@ class GPT2(pl.LightningModule):
             masked_targets = targets_flat[masked_indices]
 
             # Binary prediction eos yes/no
-            if self.config["use_eos_head"]:
+            if self.config["use_pad_head"]:
                 loss = torch.nn.functional.binary_cross_entropy_with_logits(
                     masked_logits.flatten(),      # [B,]
-                    torch.eq(masked_targets, self.config["eos_token_id"]).to(torch.float),    # [B,] same shape
+                    torch.eq(masked_targets, self.config["pad_token_id"]).to(torch.float),    # [B,] same shape
                 )
 
             # Next token prediction loss
@@ -358,56 +365,30 @@ class GPT2(pl.LightningModule):
         )
         
         # ============ Logging ========================
-        if self.config["use_eos_head"]:
-            preds = torch.nn.functional.sigmoid(logits).round().squeeze(-1).view(-1)
-            is_eos = (targets.view(-1) == self.config["eos_token_id"]).to(torch.float)
-            input_mask_flat = input_mask.view(-1)
-    
-            # Calculate base metrics
-            eos_accuracy = torch.sum((preds == is_eos) * input_mask_flat) / torch.sum(input_mask_flat)
-            eos_recall = torch.sum(preds * is_eos * input_mask_flat) / torch.sum(is_eos * input_mask_flat)
-            eos_precision = torch.sum(preds * is_eos * input_mask_flat) / torch.sum(preds * input_mask_flat)
-            eos_f1 = 2 * (eos_precision * eos_recall) / (eos_precision + eos_recall + 1e-8)  
-
-            metrics = {
-                "train/loss": loss,
-                "train/learning_rate": self.optimizers().param_groups[0]['lr'],
-                "train/masked_inputs_perc": input_mask.sum().item() / input_mask.numel(),
-                "train/eos_accuracy": eos_accuracy,
-                "train/eos_recall": eos_recall,
-                "train/eos_precision": eos_precision,
-                "train/eos_f1": eos_f1,
-            }
+        if self.config["use_pad_head"]:
+            
+            # Get predictions and targets (1 if pad, 0 otherwise)
+            flat_preds = torch.nn.functional.sigmoid(logits).round().view(-1)
+            flat_targets = torch.eq(targets, self.config["pad_token_id"]).view(-1)
                 
         else:
-            # Get predictions from logits
-            preds = logits.argmax(dim=-1)
+            # Get predictions from logits (1 if pad, 0 otherwise)
+            flat_preds = torch.eq(logits.argmax(dim=-1), self.config["pad_token_id"]).view(-1)
+            flat_targets = torch.eq(targets, self.config["pad_token_id"]).view(-1)
 
-            # Create masks for different token conditions
-            is_masked_and_pad = torch.logical_and(
-                targets == self.config["pad_token_id"],
-                input_mask
-            )
-            is_masked_and_non_pad = torch.logical_and(
-                targets != self.config["pad_token_id"],
-                input_mask
-            )
-            predicted_pad = preds == self.config["pad_token_id"]
+        # Compute metrics
+        acc, rec, prec, f1 = compute_binary_metrics(flat_preds, flat_targets)
 
-            metrics = {
-                "train/loss": loss,
-                "train/learning_rate": self.optimizers().param_groups[0]['lr'],
-                "train/masked_inputs_perc": input_mask.sum().item() / input_mask.numel(),
-                "train/median_predicted_token": torch.median(preds.flatten()[input_mask.flatten()]).item(),
-                "train/non_zero_mask": attention_mask.sum().item() / attention_mask.numel(),
-                "train/pad_masked_perc": torch.mean(is_masked_and_pad.to(torch.float16)).item(),
-                "train/pad_accuracy": torch.mean(
-                    torch.flatten((preds == targets))[is_masked_and_pad.flatten()].to(torch.float16)
-                ).item(),
-                "train/pad_false_positives": torch.mean(
-                    torch.flatten(predicted_pad)[is_masked_and_non_pad.flatten()].to(torch.float16)
-                ).item(),
-            }
+        # Save metrics 
+        metrics = {
+            "train/loss": loss,
+            "train/learning_rate": self.optimizers().param_groups[0]['lr'],
+            "train/masked_inputs_perc": input_mask.sum().item() / input_mask.numel(),
+            "train/accuracy": acc,
+            "train/recall": rec,
+            "train/precision": prec,
+            "train/f1": f1,
+        }
 
         # Log all metrics
         for name, value in metrics.items():
@@ -464,55 +445,58 @@ class GPT2(pl.LightningModule):
         )
         
         # ============ Logging ========================
-        self.log(
-            # Cross entropy loss (as for training)
-            "valid/loss",
-            loss,
-            on_step=False,  # Logs the metric at the current step
-            on_epoch=True,  # Automatically accumulates and logs at the end of the epoch
-            prog_bar=True,  # Log to the progbar
-        )
-        if self.config["use_eos_head"]:
-            preds = torch.nn.functional.sigmoid(logits).round().squeeze(-1).view(-1)
-            is_eos = (targets.view(-1) == self.config["eos_token_id"]).to(torch.float)
-            input_mask_flat = input_mask.view(-1)
-    
-            # Calculate base metrics
-            eos_accuracy = torch.sum((preds == is_eos) * input_mask_flat) / torch.sum(input_mask_flat)
-            eos_recall = torch.sum(preds * is_eos * input_mask_flat) / torch.sum(is_eos * input_mask_flat)
-            eos_precision = torch.sum(preds * is_eos * input_mask_flat) / torch.sum(preds * input_mask_flat)
-            eos_f1 = 2 * (eos_precision * eos_recall) / (eos_precision + eos_recall + 1e-8)  
-
-            metrics = {
-                "valid/eos_accuracy": eos_accuracy,
-                "valid/eos_recall": eos_recall,
-                "valid/eos_precision": eos_precision,
-                "valid/eos_f1": eos_f1,
-            }
-            for name, value in metrics.items():
-                self.log(
-                    name,
-                    value,
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=True
-                )
+        if self.config["use_pad_head"]:
+            
+            # Get predictions and targets (1 if pad, 0 otherwise)
+            flat_preds = torch.nn.functional.sigmoid(logits).round().view(-1)
+            flat_targets = torch.eq(targets, self.config["pad_token_id"]).view(-1)
+                
         else:
-            preds = logits.argmax(dim=-1).flatten().cpu().numpy()
-            preds = preds[input_mask.flatten().cpu().numpy()]   # only at masked positions
+            # Get predictions from logits (1 if pad, 0 otherwise)
+            argmax = logits.argmax(dim=-1)
+            flat_preds = torch.eq(argmax, self.config["pad_token_id"]).view(-1)
+            flat_targets = torch.eq(targets, self.config["pad_token_id"]).view(-1)
+
+            # Compute entropy in the prediction (if 0, flat prediction)
+            preds_ids = argmax.flatten().cpu().numpy()[input_mask.flatten().cpu().numpy()]   # only at masked positions
             _, counts = np.unique(
-                preds,
+                preds_ids,
                 return_counts = True
             )
-            probs = counts / len(preds)
+            probs = counts / len(preds_ids)
             entropy = - np.sum(probs * np.log2(probs))
-            max_entropy_perc = entropy / np.log2(len(preds))
+            max_entropy = np.log2(len(preds_ids))
             self.log(
-                # Entropy in the predictions (how disperse, to detect flat prediction)
+                # Ratio of entropy in the prediction to max entroy
+                # (proxy for how disperse, if close to 0 -> flat predictions)
                 "valid/predictions_entropy_perc",
-                max_entropy_perc,
+                entropy / max_entropy,
                 on_epoch=True,
                 on_step=False,
+                prog_bar=True
+            )
+
+        # Compute metrics
+        acc, rec, prec, f1 = compute_binary_metrics(flat_preds, flat_targets)
+
+        # Save metrics 
+        metrics = {
+            "valid/loss": loss,
+            "valid/learning_rate": self.optimizers().param_groups[0]['lr'],
+            "valid/masked_inputs_perc": input_mask.sum().item() / input_mask.numel(),
+            "valid/accuracy": acc,
+            "valid/recall": rec,
+            "valid/precision": prec,
+            "valid/f1": f1,
+        }
+        
+        # Log all metrics
+        for name, value in metrics.items():
+            self.log(
+                name,
+                value,
+                on_step=False,
+                on_epoch=True,
                 prog_bar=True
             )
 
@@ -667,7 +651,6 @@ class GPT2(pl.LightningModule):
         assert temperature > 0
         #assert input_ids[0,0] == 50256  # <|endoftext|> token
 
-        self.eval()
         input_ids = input_ids.to(self.device)
 
         # Get dimensions

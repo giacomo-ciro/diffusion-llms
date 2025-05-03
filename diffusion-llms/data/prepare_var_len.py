@@ -41,8 +41,8 @@ puid_folder = os.path.join(
 # Get tokenizer
 enc = tiktoken.get_encoding("gpt2")
 # however, we will define some special tokens to tackle the variable length
-eos_token_id = enc.eot_token  # Usually 50256 for GPT-2
-pad_token_id = 50257
+eos_token_id = config["eos_token_id"]  # Usually 50256 for GPT-2
+pad_token_id = config["pad_token_id"]
 context_length = config.get("context_length", 256)
 
 print(f"context_length: {context_length}")

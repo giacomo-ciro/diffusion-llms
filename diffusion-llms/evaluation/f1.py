@@ -47,4 +47,4 @@ def compute_f1(predictions, references):
     f1 = 0
     for prediction, ground_truths in zip(predictions, references):
         f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
-    return 100.0 * f1 / len(predictions)
+    return f1 / len(predictions)
