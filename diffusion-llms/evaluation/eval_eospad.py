@@ -30,7 +30,7 @@ def main(model, path_to_test, ans):
     mask_id = model.config["mask_id"]
 
     # Evaluate
-    perces = [0, 0.25, 0.50, 0.75]
+    perces = [0, 0.25, 0.50, 0.75, 1.0]
     for perc in range(len(perces)):
         if perces[perc] == 0:
             continue
@@ -122,7 +122,7 @@ def main(model, path_to_test, ans):
         }
     
     with open(f"{int(time.time())}.json", "w") as f:
-        json.dump(ans, f)
+        json.dump(ans, f, indent=4)
     
     return 
 
