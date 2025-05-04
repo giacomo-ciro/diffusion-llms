@@ -47,7 +47,7 @@ def main(model, path_to_test, ans):
             # Sample random index
             idx = torch.randint(
                 int(perces[perc-1] * len(input_ids)),
-                int(perces[perc] * len(input_ids))-1,
+                int(perces[perc] * len(input_ids)),
                 size=(1,),
                 dtype = int
             ).item()
@@ -56,7 +56,7 @@ def main(model, path_to_test, ans):
             max_new_tokens = seq_len - idx
             
             # Predict 4 tokens at each step
-            diffusion_steps = max_new_tokens // 4
+            diffusion_steps = max(1, max_new_tokens // 4)
 
             # Remove the end and predict
             generated_ids = model.generate(
