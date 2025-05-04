@@ -559,7 +559,7 @@ def main():
     # When more than 1 evaluation save
     if len(EVALUATION_TYPE) > 1:
         with open(f"{int(time.time())}.json", "w") as f:
-            json.dump(payload, f)
+            json.dump(payload, f, indent=4)
 
 if __name__ == "__main__":
     main()
