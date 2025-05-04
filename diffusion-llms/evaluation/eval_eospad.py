@@ -34,7 +34,7 @@ def main(model, path_to_test, ans):
     for perc in range(len(perces)):
         if perces[perc] == 0:
             continue
-        print(f"Masking a random token in the {perc+1}-th quarter of the sentence")
+        print(f"Masking a random token in the {perc}-th quarter of the sentence")
         accuracies, recalls, precisions, f1s = [],[],[],[]
         for sample in tqdm(ds):
 
@@ -47,7 +47,7 @@ def main(model, path_to_test, ans):
             # Sample random index
             idx = torch.randint(
                 int(perces[perc-1] * len(input_ids)),
-                int(perces[perc] * len(input_ids)),
+                int(perces[perc] * len(input_ids))-1,
                 size=(1,),
                 dtype = int
             ).item()
