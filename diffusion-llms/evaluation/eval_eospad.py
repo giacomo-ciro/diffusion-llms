@@ -111,7 +111,7 @@ def main(model, path_to_test, ans):
 
             # if input("Press enter to sample another: ") != "":
             #     break
-            if len(accuracies) >= 10:
+            if len(accuracies) >= 100:
                 break
         print("Computing average metrics...")
         ans[perc] = {

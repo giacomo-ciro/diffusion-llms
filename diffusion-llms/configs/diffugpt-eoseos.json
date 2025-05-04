@@ -1,7 +1,7 @@
 {
     "pipeline": "diffusion",
-    "init_from":"diffugpt",
-    "memmap_path": "/home/3160499/diffusion-llms/diffusion-llms/data/1M_docs_eoseos/var_len_train_384M_1024.bin",
+    "init_from":"/home/3160499/diffusion-llms/diffusion-llms/checkpoints/diffugpt-eoseos/model.ckpt",
+    "memmap_path": "/home/3160499/diffusion-llms/diffusion-llms/data/1M_docs_eoseos/test.bin",
     "padded_dataset": true,
     "use_pad_head": false,
     "pad_masked_perc": 0.05,

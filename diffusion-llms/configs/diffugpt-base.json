@@ -1,0 +1,52 @@
+{
+  "pipeline": "diffusion",
+  "init_from":"diffugpt",
+  "memmap_path": "/home/3160499/diffusion-llms/diffusion-llms/data/1M_docs_eoseos/test.bin",
+  "padded_dataset": true,
+  "use_pad_head": false,
+  "pad_masked_perc": 0.05,
+  "pad_annealing_samples": 5000,
+  
+  "context_length": 1024,
+  "n_embd": 768,
+  "n_layer": 12,
+  "n_head": 12, 
+  "resume_training":false,
+  
+  "attn_annealing_steps": 0,
+  "mask_id": 10541,
+  "eos_token_id": 50256,
+  "pad_token_id": 50256,
+
+  "n_epochs": 1,
+  "n_steps": 10000,
+  "val_check_interval": 100,
+  "val_test_perc": 0.001,
+
+  "batch_size": 16,
+  "accumulate_grad": 1,
+  "grad_clip":1,
+
+  "betas": [0.9,0.95],
+  "weight_decay": 0.01,
+  "max_lr": 6e-5,
+  "warmup_pct": 0.1,
+  "div_factor":25.0,
+  "final_div_factor":1e4,
+
+  "enable_checkpointing": true,
+  "save_dir": "./checkpoints/",
+  "wandb": true,
+  "run_name": "diffugpt-eoseos",
+  "project_name": "diffusion-llms",
+
+  "user_prompt": "Once upon a time",
+  "n_samples": 1,
+  "temperature": 1.0,
+  "max_new_tokens": 10,
+  "top_k": null,
+  "diffusion_steps": 4,
+  "repetition_penalty": 1.2,
+  "do_sample": false,
+  "denoising_strategy": "random"
+}
