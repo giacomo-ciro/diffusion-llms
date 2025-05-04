@@ -1,0 +1,58 @@
+{
+    "pipeline": "diffusion",
+    "init_from":"diffugpt",
+    "memmap_path": "./data/02052025121536/var_len_train_38K_1024.bin",
+    "padded_dataset": true,
+    "pad_masked_perc": 0.15,
+    "pad_annealing_steps": 100,
+    "context_length": 1024,
+  
+    "n_embd": 768,
+    "n_layer": 12,
+    "n_head": 12,
+    "resume_training":false,
+  
+    "attn_annealing_steps": 1000,
+    "mask_id": 10541,
+    "eos_token_id": 50256,
+    "pad_token_id": 50257,
+    "use_eos_head": false,
+    "use_pad_head": false,
+  
+    "n_epochs": 1,
+    "n_steps": 1,
+    "val_check_interval": 1,
+    "val_test_perc": 0.05,
+  
+    "batch_size": 8,
+    "accumulate_grad": 16,
+    "grad_clip":1,
+  
+    "betas": [0.9,0.95],
+    "weight_decay": 0.01,
+    "max_lr": 6e-4,
+    "warmup_pct": 0.1,
+    "div_factor":25.0,
+    "final_div_factor":1e4,
+  
+    "enable_checkpointing": true,
+    "save_dir": "./checkpoints/",
+    "wandb": false,
+    "run_name": "diffugpt-pretrained-finewebtext-baseline",
+    "project_name": "diffusion-llms",
+  
+    "user_prompt": "Once upon a time",
+    "n_samples": 1,
+    "temperature": 1.0,
+    "max_new_tokens": 512,
+    "top_k": null,
+    "diffusion_steps": 64,
+    "repetition_penalty": 1.2,
+    "do_sample": false,
+    "denoising_strategy": "random",
+  
+    "_comment": "Parameters below added/modified for eval_eos.py",
+    "ckpt_path_for_eval": "../checkpoints/ymd_250502_HMS_12_35_44/epoch_0_ce_9.90.ckpt",
+    "test_data_path_for_eval": "../data/02052025121536/var_len_test_380K_1024.bin",
+    "eval_batch_size": 16
+  }
