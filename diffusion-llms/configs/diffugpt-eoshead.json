@@ -1,7 +1,7 @@
 {
   "pipeline": "diffusion",
-  "init_from":"diffugpt",
-  "memmap_path": "/home/3160499/diffusion-llms/diffusion-llms/data/1M_docs_eoseos/train.bin",
+  "init_from":"/home/3160499/diffusion-llms/diffusion-llms/checkpoints/eoshead-twosided/model.ckpt",
+  "memmap_path": "/home/3160499/diffusion-llms/diffusion-llms/data/1M_docs_eoseos/test.bin",
   "padded_dataset": true,
   "use_pad_head": true,
   "pad_masked_perc": 0.5,
