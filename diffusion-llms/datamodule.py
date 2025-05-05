@@ -133,12 +133,6 @@ class MemmapTokenDataset(Dataset):
         X = torch.from_numpy(X).to(torch.int64)
         y = torch.from_numpy(y).to(torch.int64)
 
-        # If eos head training, mask from random ix to the end
-        if self.use_pad_head:
-            mask = torch.zeros_like(mask)
-            idx = torch.randint(0, len(X), size=(1,)).item()
-            mask[idx:] = True
-
         # (int, int, bool)
         return X, y, mask
     
