@@ -57,7 +57,7 @@ def main(model, path_to_test, ans):
             
             # Predict 4 tokens at each step
             input_ids_masked = input_ids.clone()
-            input_ids_masked[idx:] = mask_id
+            input_ids_masked[idx] = mask_id
 
             # Predict
             logits, _ = model.forward(
@@ -67,11 +67,12 @@ def main(model, path_to_test, ans):
                 attention_mask=torch.ones(size=(1, 1, seq_len, seq_len))
             )
             preds = torch.nn.functional.sigmoid(logits).round().view(-1)
-            
+
             # Get prediction to compute binary metrics (1 if pad, 0 otherwise)
             tp, tn, fp, fn = 0, 0, 0, 0
             for i, pred in enumerate(preds[idx:]):
-                true = input_ids[idx+i] == pad_token_id
+                true = float(input_ids[idx+i] == pad_token_id)
+
                 if pred == pad_token_id and true == pad_token_id:
                     tp += 1
                 elif pred == pad_token_id and true != pad_token_id:
