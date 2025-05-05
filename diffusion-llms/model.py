@@ -92,17 +92,17 @@ class GPT2(pl.LightningModule):
             # Freeze all parameters
             for param in self.gpt2.parameters():
                 param.requires_grad = False
-            wte = self.gpt2.transformer.wte.weight
+            # wte = self.gpt2.transformer.wte.weight
             
-            # Unfreeze EOS / PAD embedding
-            if self.config["pad_token_id"] == self.config["eos_token_id"]:
-                wte[-1].requires_grad = True
-            else:
-                wte[-2].requires_grad = True 
-                wte[-2].requires_grad = True 
+            # # Unfreeze EOS / PAD embedding
+            # if self.config["pad_token_id"] == self.config["eos_token_id"]:
+            #     wte[-1].requires_grad = True
+            # else:
+            #     wte[-2].requires_grad = True 
+            #     wte[-2].requires_grad = True 
             
-            # Unfreeze mask embedding
-            wte[self.config["mask_id"]] = True
+            # # Unfreeze mask embedding
+            # wte[self.config["mask_id"]] = True
             
             # Init new head to binary predict eos
             self.eos_head = torch.nn.Linear(self.gpt2.lm_head.in_features, 1)
