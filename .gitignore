@@ -8,6 +8,7 @@ __pycache__
 */checkpoints
 
 diffusion-llms/data/*/
+!diffusion-llms/data/recipe/
 
 *.ckpt
 .DS_Store
