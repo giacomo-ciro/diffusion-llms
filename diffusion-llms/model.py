@@ -785,10 +785,18 @@ class GPT2(pl.LightningModule):
         Returns perplexity (lower is better)
         """
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
-        #assert input_ids[0,0] == 50256  # <|endoftext|> token
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        assert isinstance(src_mask, torch.Tensor) and src_mask.dim() == 2
+        # Ensure inputs are on the same device BEFORE proceeding
+        assert input_ids.device == src_mask.device, f"Input tensors on different devices: {input_ids.device} vs {src_mask.device}"
+
+        device = input_ids.device # Get device from input tensor
+        # --- REMOVED incorrect device detection ---
+        # device = "cuda" if torch.cuda.is_available() else "cpu"
+
         self.eval()
-        input_ids = input_ids.to(device)
+        # already on the right device:
+        # input_ids = input_ids.to(device)
+        
         # Get dimensions
         B = input_ids.shape[0]
         assert(B == 1) # just for now
@@ -845,8 +853,6 @@ class GPT2(pl.LightningModule):
             
             # print("positional_logits:", positional_logits)
             
-
-
             # Get the most confident predictions (lowest entropy)
             probas_to_denoise, idx_to_denoise = torch.topk(
                 positional_probas,
@@ -859,7 +865,6 @@ class GPT2(pl.LightningModule):
             # Add probas_to_denoise to accumulate_probas
             for i, idx in enumerate(idx_to_denoise[0]):
                 accumulate_probas[0, idx] = probas_to_denoise[0, i]
-            
 
             # Transform indices to mask
             step_mask = torch.zeros_like(mask)
