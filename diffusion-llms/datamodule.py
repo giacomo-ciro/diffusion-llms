@@ -27,6 +27,7 @@ class MemmapTokenDataset(Dataset):
         self.stride = config["context_length"] if self.is_padded_dataset else 1
         self.pad_masked_perc = config["pad_masked_perc"]
         self.pad_annealing_samples = config["pad_annealing_samples"]
+        self.use_pad_head = config["use_pad_head"]
         # Calculate effective length - ensure we can always get context_length + 1 tokens
         # (for the shifted target sequence)
         total_positions = max(0, len(self.data) - (self.context_length + 1) + 1)
@@ -131,6 +132,12 @@ class MemmapTokenDataset(Dataset):
         # Cast to correct type
         X = torch.from_numpy(X).to(torch.int64)
         y = torch.from_numpy(y).to(torch.int64)
+
+        # If eos head training, mask from random ix to the end
+        if self.use_pad_head:
+            mask = torch.zeros_like(mask)
+            idx = torch.randint(0, len(X), size=(1,)).item()
+            mask[idx:] = True
 
         # (int, int, bool)
         return X, y, mask
