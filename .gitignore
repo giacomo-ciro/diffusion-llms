@@ -13,7 +13,5 @@ diffusion-llms/data/*/
 *.ckpt
 .DS_Store
 local_data
-*.csv
-*.txt
 
 .venv
