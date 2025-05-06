@@ -1,0 +1,16 @@
+{
+    "lambada": 0.1782178217821782,
+    "hellaswag": 0.3,
+    "wino": 0.51,
+    "piqa": 0.51,
+    "siqa": 0.35,
+    "infilling": [
+        5.156165019541175,
+        0.0,
+        4.815180318014026
+    ],
+    "trivia": 0.04044444444444444,
+    "model": "/home/brimax/repos/diffusion-llms/diffusion-llms/checkpoints/diffugpt-eoseos/model.ckpt",
+    "pipeline": "diffusion",
+    "iters": 100
+}
