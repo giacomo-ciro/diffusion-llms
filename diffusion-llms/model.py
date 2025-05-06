@@ -898,8 +898,11 @@ class GPT2(pl.LightningModule):
         """
 
         assert isinstance(input_ids, torch.Tensor) and input_ids.dim() == 2
-        #assert input_ids[0,0] == 50256  # <|endoftext|> token
-        device = 'cuda'
+        assert isinstance(src_mask, torch.Tensor) and src_mask.dim() == 2
+        assert input_ids.device == src_mask.device, f"Input tensors on different devices: {input_ids.device} vs {src_mask.device}"
+
+        # --- Get device from input tensor ---
+        device = input_ids.device
         self.eval()
         input_ids = input_ids.to(device)
         # Get dimensions
