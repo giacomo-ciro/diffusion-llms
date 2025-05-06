@@ -16,6 +16,16 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 - [ ] Measure performance (eos prediction accuracy, benchmarks) of pre-trained DiffuGPT before and after fine-tuning on dataset of (text + eos + pad)
 - [ ] Curriculum learning on optimzer steps (currently is on samples, +1 every time a new sample is yielded)
 
+- [dave] - Implement Classification/PredictionDataset in `datamodule.py` to generate training data that predicts 1 for eos and 0 for non-eos tokens.
+- see datamodule, same for regression.
+- [dave] - Implement RegressionDataset in `datamodule.py` to handle the length of the sequence.
+- the expected output is a tensor of shape (batch_size, 1)
+- dataloader iterates over the dataset and returns a batch of sequences
+- get item handles the logic of how to get the data from the dataset and returns X, y, msk
+- structure of the file class regression with methods: init with prompts and answer, len, get item (which returns x, y, msk); second class: memmapdatamodule with 
+- [luca] - 
+- [vitto] - 
+
 ### Sync 30/04/25
 - [ ] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
     - otherwise, we mask and unmask tokens until model predicts where the eos token is
@@ -182,27 +192,29 @@ $ python -m pip install --upgrade datasets huggingface-hub fsspec
 
 ## Repository Structure
 ```bash
-├── diffusion-llms/ 
-│   ├── checkpoints/        # Checkpoint files for model weights
-│   ├── data/openwebtext_local/
-│       ├── prepare.py      # Script for tokenizing and preparing dataset
+├── diffusion_llms/ 
+│   ├── configs/
+│   ├── data/
+│       ├── prepare.py      
 │       ├── prepare_var_len.py 
-│       ├── train_1M.txt
+│       ├── train.csv
 │       └── etc.
+│   ├── dataloader/
+│       ├── llada_datamodule.py
 │   ├── evaluation/    
 │       ├── eval.py
-│       ├── test_performances.py
-│       └── etc.            # Duplicate scripts to be removed (after check)
+│       └── etc.     
+│   ├── models/
+│   ├── tokenizers/
+│   ├── __init__.py       
 │   ├── attention_patch.py
 │   ├── config.json         # Default configuration file
 │   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
-│   ├── gpt2.py             # Core GPT-2 model architecture
 │   ├── main.ipynb          # only for testing, ignore
 │   ├── model.py            # PyTorch Lightning wrapper for GPT-2
 │   ├── sample.py           # Text generation script
 │   ├── train.py            # Main training script
 │   └── utils.py            
-├── papers/
 ├── .gitignore
 ├── LICENSE
 ├── README.md
