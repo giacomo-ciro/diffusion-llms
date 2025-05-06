@@ -23,6 +23,34 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 - [dave - in progress] Define a method to evaluate our specific task, e.g., how to measure the performance of the model in predicting the eos token at the first step of the diffusion process (accuracy / metrics / as function of numbe of unmasked tokens etc).
 - [ ] Complete `check_config_validity` in `utils.py`
 
+### Experiments
+
+- [ ] Baseline Experiment
+	- [ ]	Train and evaluate DiffuGPT baseline to establish reference performance.
+
+- [ ] EOS and PAD Prediction Experiments
+	- [ ]	EOS-only training (Accuracy-focused): loss computed on <eos> tokens
+	- [ ]	EOS+PAD joint training (Random data) (Accuracy-focused): 
+
+- [ ] Curriculum Learning Experiments
+	- [ ]	EOS+PAD training with Curriculum Learning (Accuracy and generalization): Begin training on sequences of short length (e.g., 20 tokens), gradually increasing length (20 → 40 → 60, etc.). 
+
+- [ ] Loss Function Ablation Studies
+	- [ ]	Loss-weighting for EOS/PAD tokens (Improving token prediction accuracy): Experiment with weighted cross-entropy losses specifically targeting EOS/PAD token accuracy.
+	- [ ] Auxiliary loss (contrastive/regularization) (Promoting robustness): Introduce auxiliary contrastive or regularization terms focusing on EOS/PAD prediction.
+
+- [ ] Quick RL-based Experiment????
+    - [ ]	Reinforcement Learning for EOS accuracy optimization (Rapid improvement): reward explicitly based on EOS token prediction accuracy. Policy-gradient or PPO fine-tuning.
+
+- [ ] Inference Performance Checks
+	- [ ] Benchmark inference speed (tokens/sec, latency per sequence).
+	- [ ] Compare EOS/PAD trained models vs baseline(both arm and diffu-gpt)
+
+- [ ] Generalization & Robustness Testing
+	- [ ]	Length generalization tests: Evaluate models trained on shorter sequences against significantly longer test sequences.
+	- [ ]	Domain generalization tests???
+
+
 ### Feedback from Professor
 - ambition is good, doability is the question
 - concretize the chance of success - a series of questions that can be answered quickly at the beginning
@@ -180,6 +208,7 @@ $ python -m pip install --upgrade datasets huggingface-hub fsspec
 ├── README.md
 └── requirements.txt
 ```
+
 
 ## References
 

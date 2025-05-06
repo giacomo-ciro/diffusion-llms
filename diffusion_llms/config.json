@@ -1,0 +1,61 @@
+{
+  "pipeline": "diffusion",
+  "init_from":"",
+  "memmap_path": "/Users/vittorio/Projects/uni/Deep learning/diffusion-llms/diffusion_llms/data/05052025151606_old/train.bin",
+  "padded_dataset": true,
+  "device": "mps",
+  "random_mask_prob": 0.15,
+  "eos_window_max": 100,
+  "window_annealing_steps": 5000,
+
+
+  "context_length": 1024,
+
+  "n_embd": 128,
+  "n_layer": 1,
+  "n_head": 1,
+  "resume_training":false,
+
+  "attn_annealing_steps": 1000,
+  "mask_id": 10541,
+  "eos_token_id": 50256,
+  "pad_token_id": 50257,
+  "use_pad_head": false,
+
+  "n_epochs": 1,
+  "n_steps": 100000,
+  "val_check_interval": 1000,
+  "val_test_perc": 0.05,
+
+  "batch_size": 2,
+  "accumulate_grad": 1,
+  "grad_clip":1,
+
+  "betas": [0.9,0.95],
+  "weight_decay": 0.01,
+  "max_lr": 1e-5,
+  "warmup_pct": 0.1,
+  "div_factor":25.0,
+  "final_div_factor":1e4,
+
+  "enable_checkpointing": true,
+  "save_dir": "./checkpoints/",
+  "wandb": true,
+  "run_name": "diffugpt-eospad",
+  "project_name": "diffusion-llms",
+
+  "user_prompt": "I am jack. ",
+  "n_samples": 1,
+  "temperature": 1.0,
+  "max_new_tokens": 10,
+  "top_k": null,
+  "diffusion_steps": 4,
+  "repetition_penalty": 1.2,
+  "do_sample": false,
+  "denoising_strategy": "random",
+
+  "_comment": "Parameters below added/modified for eval_eos.py",
+  "ckpt_path_for_eval": "../checkpoints/ymd_250502_HMS_12_35_44/epoch_0_ce_9.90.ckpt",
+  "test_data_path_for_eval": "../data/02052025121536/var_len_test_380K_1024.bin",
+  "eval_batch_size": 16
+}
