@@ -362,14 +362,24 @@ def eval_infilling(model, tokenizer, config, max_iter=np.inf, verbose = False):
             temperature=config.get("temperature"),
             top_k=config.get("top_k"),
         )
-        
+
         # Extract the relevant token IDs
         generated_token_ids = res.tolist()[0][len(prefix) - 1 : len(x0) - len(suff) - 1]
         # Get the pad_token_id from the config (safer than hardcoding)
         pad_token_id = config.get("pad_token_id", 50257) # Default if not in config
         # Filter out the pad_token_id
         filtered_token_ids = [token for token in generated_token_ids if token != pad_token_id]
-        pred = tokenizer.decode(filtered_token_ids)
+        # Decode the filtered list
+        try:
+            pred = tokenizer.decode(filtered_token_ids)
+        except KeyError as e:
+            print(f"\nERROR during decode! Invalid token: {e}")
+            print(f"Problematic filtered list: {filtered_token_ids}")
+            # Decide how to handle: skip sample, assign empty string, etc.
+            pred = "" # Assign empty string on error for now
+            print("Skipping sample due to decode error.")
+            # Optionally re-raise if you want the script to stop:
+            # raise e
 
         samples.append(dict(pred=pred, label=middle, prefix=prompt, suffix=suffix))
         gens.append(pred)

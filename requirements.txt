@@ -6,3 +6,6 @@ tiktoken
 datasets
 transformers
 evaluate
+absl-py
+nltk
+rouge_score
