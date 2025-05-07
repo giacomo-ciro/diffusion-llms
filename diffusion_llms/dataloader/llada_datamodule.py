@@ -218,3 +218,46 @@ class DataModule(pl.LightningDataModule):
             shuffle=False,
             pin_memory=True
         )
+
+
+class TokenCounter:
+    """
+    Utility class that counts the total number of tokens in a dataset.
+    
+    This class can work with either RegressionDataset or ClassificationDataset
+    to calculate the total number of tokens across all prompts and answers.
+    """
+    def __init__(self, dataset):
+        """
+        Initialize with a dataset instance.
+        
+        Args:
+            dataset: Either RegressionDataset or ClassificationDataset instance
+        """
+        self.dataset = dataset
+        
+    def count_total_tokens(self) -> int:
+        """
+        Iterates through the dataset and counts the total number of tokens
+        in all prompts and answers.
+        
+        Returns:
+            int: Total number of tokens in the dataset
+        """
+        total_tokens = 0
+        
+        for idx in range(len(self.dataset)):
+            # For RegressionDataset
+            if hasattr(self.dataset, 'tokenizer') and hasattr(self.dataset, 'prompts'):
+                prompt = self.dataset.prompts[idx]
+                answer = self.dataset.answers[idx]
+                
+                # Count tokens in prompt and answer
+                tokenized_prompt = self.dataset.tokenizer.encode(prompt)
+                tokenized_answer = self.dataset.tokenizer.encode(answer)
+                
+                # Add 1 for EOS token
+                sample_tokens = len(tokenized_prompt) + len(tokenized_answer) + 1
+                total_tokens += sample_tokens
+            
+        return total_tokens
