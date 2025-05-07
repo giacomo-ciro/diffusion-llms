@@ -262,14 +262,14 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         task_type = self.config.get("task_type")
 
-        print(f"AuxiliaryTaskDataModule: Setting up for task '{task_type}'...")
+        print(f"Llada DataModule: Setting up for task '{task_type}'...")
 
         if task_type == "classification":
             self.data = ClassificationDataset(self.config, self.tokenizer, self.data_df)
         elif task_type == "regression":
             self.data = RegressionDataset(self.config, self.tokenizer, self.data_df)
         else:
-            raise ValueError(f"Invalid 'aux_task_type': {task_type}. Must be 'regression' or 'classification'.")
+            raise ValueError(f"Invalid 'task_type': {task_type}. Must be 'regression' or 'classification'.")
 
         # Split the dataset
         assert self.val_test_perc < 1.0

@@ -10,7 +10,7 @@
 
   "llada_train_path": "../data/train.csv",
   "llada_test_path": "../data/test.csv",
-  "task_type": "regression",
+  "task_type": "classification",
   "seed": 42,
 
   "context_length": 1024,

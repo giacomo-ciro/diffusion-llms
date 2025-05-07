@@ -88,7 +88,16 @@ def test_datamodule(config_path: str, num_batches_to_check: int = 2):
                 # Filter out padding for cleaner printing
                 X_sample_unpadded = [tok for tok in X_sample if tok != dm.config.get("pad_token_id", 50257)]
                 print(f"  Decoded X (unpadded): '{tokenizer.decode(X_sample_unpadded)}'")
-                print(f"  Target y: {y[0].item()}") # Print regression value or first element of classification target
+                # Print target y differently based on task
+                if task_type == "regression":
+                    print(f"  Target y (length): {y[0].item()}")
+                elif task_type == "classification":
+                    # For classification, y[0] is the label sequence. Let's print where it's 1 (EOS).
+                    y_sample_labels = y[0].tolist() # Convert tensor to list
+                    eos_indices_in_y = [i for i, label in enumerate(y_sample_labels) if label == 1]
+                    print(f"  Target y (EOS positions): {eos_indices_in_y}") # Print indices where label is 1
+                else:
+                    print(f"  Target y: {y[0]}") # Fallback for unknown task
                 # Find where mask is True
                 msk_indices = torch.where(msk[0])[0].tolist()
                 if msk_indices:
