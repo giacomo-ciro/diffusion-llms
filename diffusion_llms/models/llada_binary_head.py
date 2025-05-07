@@ -1,44 +1,68 @@
-# Inspired by https://github.com/ML-GSAI/LLaDA/blob/main/generate.py. True LLaDA code
-
 import torch
 import lightning as pl
 import torch.nn.functional as F
-from transformers import AutoModel, AutoTokenizer
+from llada import LladaBackbone
 import numpy as np
 
-class LladaBackbone(pl.LightningModule):
+class UsainLLada(LladaBackbone):
     """
-    Wraps the Llada diffusion model to get the logits from the transfromer backbone.
-    """
+    Wraps the Llada diffusion and adds a linear head to predict the length of the sequence.
 
+    In generation, the model will predict the length of the sequence and then generate the sequence.
+    Length, then condition the generation on the length and thus complete the sequence, by filling remaining tokens.
+    """
     def __init__(self):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Base")
-        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Base")
-        # The transformer model
-        self.transformer = base_model.model.transformer
+        self.eos_token_id = self.tokenizer.eos_token_id # tokenizer is inherited from LladaBackbone
 
-        # The head
-        self.lm_head = self.transformer.pop("ff_out")
+        # freeze all transformer parameters
+        for param in self.transformer.parameters():
+            param.requires_grad = False
 
-        # The loss
-        self.loss = 0
+        # to be sure freeze lm head
+        for param in self.lm_head.parameters():
+            param.requires_grad = False
 
-    def forward(self, input_ids, target):
-        self.transformer(input_ids)
-        logits = self.lm_head(input_ids)
-        return logits
+        # add a linear head to predict wether a token is the end of the sequence or not
+        self.is_eos_head = torch.nn.Linear(self.transformer.config.hidden_size, 1)
+
+    def forward(self, input_ids, target=None, return_length=False):
+        # Pass input through the transformer
+        transformer_outputs = self.transformer(input_ids)
+        hidden_states = transformer_outputs.last_hidden_state # get transformer output
+
+        logits, eos_logits = None, None
+        if return_length:
+            # get the length of the sequence
+            eos_logits = self.is_eos_head(hidden_states)
+            return logits, eos_logits
+        
+        logits = self.lm_head(hidden_states)
+        
+        return logits, eos_logits
+    
 
     def training_step(self, batch, batch_idx):
-        return
+        X, y = batch  # X: input_ids, y: target_ids (shifted by one)
+        # Forward pass to get EOS logits
+        _, eos_logits = self.forward(X, return_length=True)  # eos_logits: [batch, seq_len, 1]
+        eos_logits = eos_logits.squeeze(-1)  # [batch, seq_len]
+        # Compute loss (y: [batch, seq_len])
+        loss = self.compute_loss(eos_logits, y)
+        self.log("train_loss", loss, prog_bar=True)
+        return loss
 
     def validation_step(self, batch, batch_idx):
-        return
-
+        X, y = batch
+        _, eos_logits = self.forward(X, return_length=True)
+        eos_logits = eos_logits.squeeze(-1)
+        loss = self.compute_loss(eos_logits, y)
+        self.log("val_loss", loss, prog_bar=True)
+        return loss
+    
     @torch.no_grad()
     def generate(
         self,
-        model,
         prompt,
         steps=128,
         gen_length=128,
@@ -60,18 +84,23 @@ class LladaBackbone(pl.LightningModule):
             remasking: Remasking strategy. 'low_confidence' or 'random'.
             mask_id: The toke id of [MASK] is 126336.
         """
+
         x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long).to(
-            model.device
+            self.device
         )
         x[:, : prompt.shape[1]] = prompt.clone()
 
         prompt_index = x != mask_id
+
+        predict_length = self.predict_length(x, block_length=block_length)
 
         assert gen_length % block_length == 0
         num_blocks = gen_length // block_length
 
         assert steps % num_blocks == 0
         steps = steps // num_blocks
+
+        # predict the length of the sequence
 
         for num_block in range(num_blocks):
             block_mask_index = (
@@ -89,11 +118,11 @@ class LladaBackbone(pl.LightningModule):
                     un_x = x.clone()
                     un_x[prompt_index] = mask_id
                     x_ = torch.cat([x, un_x], dim=0)
-                    logits = model(x_).logits
+                    logits = self.get_logits(x_)
                     logits, un_logits = torch.chunk(logits, 2, dim=0)
                     logits = un_logits + (cfg_scale + 1) * (logits - un_logits)
                 else:
-                    logits = model(x).logits
+                    logits = self.get_logits(x)
 
                 logits_with_noise = self.add_gumbel_noise(
                     logits, temperature=temperature
@@ -127,75 +156,23 @@ class LladaBackbone(pl.LightningModule):
 
         return x
 
-    def get_num_transfer_tokens(self, mask_index, steps):
-        """
-        In the reverse process, the interval [0, 1] is uniformly discretized into steps intervals.
-        Furthermore, because LLaDA employs a linear noise schedule (as defined in Eq. (8)),
-        the expected number of tokens transitioned at each step should be consistent.
-
-        This function is designed to precompute the number of tokens that need to be transitioned at each step.
-        """
-        mask_num = mask_index.sum(dim=1, keepdim=True)
-
-        base = mask_num // steps
-        remainder = mask_num % steps
-
-        num_transfer_tokens = (
-            torch.zeros(
-                mask_num.size(0), steps, device=mask_index.device, dtype=torch.int64
-            )
-            + base
-        )
-
-        for i in range(mask_num.size(0)):
-            num_transfer_tokens[i, : remainder[i]] += 1
-
-        return num_transfer_tokens
-
-    def add_gumbel_noise(self, logits, temperature):
-        """
-        The Gumbel max is a method for sampling categorical distributions.
-        According to arXiv:2409.02908, for MDM, low-precision Gumbel Max improves perplexity score but reduces generation quality.
-        Thus, we use float64.
-        """
-        if temperature == 0:
-            return logits
-        logits = logits.to(torch.float64)
-        noise = torch.rand_like(logits, dtype=torch.float64)
-        gumbel_noise = (-torch.log(noise)) ** temperature
-        return logits.exp() / gumbel_noise
-
-    def compute_loss(self, logits, targets, input_mask):
-        """
-        Compute the loss.
-        Args:
-            logits: The output of the model.
-            targets: The target labels.
-            input_mask: The input mask.
-        """
-        # no chunking at all
-        logits = logits.reshape(-1, logits.size(-1))  # [B * seq_len, vocab_size]
-        targets = targets.reshape(-1)  # [B * seq_len]
-        return torch.nn.functional.cross_entropy(logits, targets, ignore_index=-1)
-
-    def get_logits(self, input_ids):
-        """
-        Get the logits from the model.
-        Args:
-            input_ids: The input ids.
-        """
-        # no chunking at all
-        logits = self(input_ids)
-        return logits
     
+    def compute_loss(self, y_pred, y):
+        # compute loss
 
-    def to(self, device):
+        y = (y == self.eos_token_id).float()
+        return F.binary_cross_entropy_with_logits(y_pred, y)
+
+        
+    def predict_length(self, input_ids, block_length=128):
         """
-        Move the model to the specified device.
+        Predict the length of the sequence.
         Args:
-            device: The device to move the model to.
+            input_ids: A tensor of shape (1, L).
+        Returns:
+            A tensor of shape (1, L).
         """
-        super().to(device)
-        self.transformer.to(device)
-        self.lm_head.to(device)
-        return self
+        _, eos_logits = self.forward(input_ids, return_length=True)
+        eos_logits = eos_logits.squeeze(-1)
+        return torch.sigmoid(eos_logits)
+
