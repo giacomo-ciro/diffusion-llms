@@ -23,10 +23,31 @@ class LladaBackbone(pl.LightningModule):
 
         # The loss
         self.loss = 0
+    
+    def transformer(self, input_ids):
+        """
+        Args:
+            input_ids: The input ids.
+        """
+        # Get the embeddings
+        # Get the embeddings
+        hidden_states = None
+        
+        # Process through all transformer components sequentially
+        for key, module in self.transformer.items():
+            if hidden_states is None:
+            # First module needs input_ids directly
+            hidden_states = module(input_ids)
+            else:
+            # Pass through subsequent modules
+            hidden_states = module(hidden_states)
+        return hidden_states
 
-    def forward(self, input_ids, target):
-        self.transformer(input_ids)
-        logits = self.lm_head(input_ids)
+    def forward(self, input_ids, target=None):
+        # Process through transformer components
+        embeddings = self.transformer(input_ids)  # Word embeddings
+        logits = self.lm_head(hidden_states)
+        # Return in expected format
         return logits
 
     def training_step(self, batch, batch_idx):
