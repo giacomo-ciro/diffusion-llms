@@ -24,10 +24,10 @@ class LladaBackbone(pl.LightningModule):
         # The loss
         self.loss = 0
     
-    def forward(self, input_ids, target):
+    def forward(self, input_ids, target=None):
         hidden_states = self.forward_hidden_repr(input_ids)
         logits = self.lm_head(hidden_states)
-        return logits
+        return {"logits": logits}  # Return as dictionary with 'logits' key
 
     def training_step(self, batch, batch_idx):
         return
@@ -206,25 +206,106 @@ class LladaBackbone(pl.LightningModule):
         excluding the final language modeling head (ff_out).
         
         Args:
-            input_ids: Tensor of shape (batch_size, sequence_length)
+            input_ids: Tensor of shape (batch_size, sequence_length) or a tuple
+                       from which a tensor can be extracted.
             attention_mask: Optional tensor of shape (batch_size, sequence_length)
             
         Returns:
             hidden_states: Tensor of shape (batch_size, sequence_length, hidden_dim)
         """
+
+        # Attempt to robustly extract the core tensor from input_ids if it's a tuple
+        current_val = input_ids
+        while isinstance(current_val, tuple):
+            if not current_val: # Check for empty tuple
+                raise ValueError("Cannot process an empty tuple as input_ids.")
+            # Assume the primary data is the first element; continue unwrapping if it's also a tuple.
+            current_val = current_val[0]
+        
+        if not torch.is_tensor(current_val):
+            raise TypeError(
+                f"Expected input_ids to resolve to a tensor, but got {type(input_ids)} "
+                f"which resolved to {type(current_val)} ({current_val})."
+            )
+        
+        actual_input_tensor = current_val
+
         # Get embedding from wte (word token embedding)
         embedding_layer = self.transformer["wte"]
-        hidden_states = embedding_layer(input_ids)
+        hidden_states = embedding_layer(actual_input_tensor)
         
         # Apply dropout and layer norm if present
         if "emb_drop" in self.transformer:
             hidden_states = self.transformer["emb_drop"](hidden_states)
+        # Based on your model's structure printout, ln_f is applied after embedding/dropout
         if "ln_f" in self.transformer:
             hidden_states = self.transformer["ln_f"](hidden_states)
 
         # Pass through the transformer blocks (encoder layers)
+        for i, block in enumerate(self.transformer["blocks"]):
+            input_to_block_type = type(hidden_states) # For debugging
+            input_to_block_shape = hidden_states.shape if torch.is_tensor(hidden_states) else "N/A" # For debugging
+
+            result = block(hidden_states)
+
+            if isinstance(result, tuple):
+                if not result: # Check for an empty tuple
+                    raise ValueError(f"Transformer block {i} returned an empty tuple.")
+                
+                hidden_states = result[0] # Extract the first element
+
+                # Rigorous check for the extracted hidden_states
+                if not torch.is_tensor(hidden_states):
+                    raise TypeError(
+                        f"After processing block {i}, the first element of the returned tuple "
+                        f"(expected to be hidden_states) is type {type(hidden_states)}, not a Tensor. "
+                        f"The full tuple was: {result}. Input to block was type {input_to_block_type} with shape {input_to_block_shape}."
+                    )
+            else: # If block did not return a tuple
+                hidden_states = result
+                if not torch.is_tensor(hidden_states):
+                    raise TypeError(
+                        f"Transformer block {i} did not return a tuple, and its direct output "
+                        f"is type {type(hidden_states)}, not a Tensor. "
+                        f"Input to block was type {input_to_block_type} with shape {input_to_block_shape}."
+                    )
+                    
+            # Optional: Print shape to verify
+            # print(f"Block {i} output hidden_states shape: {hidden_states.shape}, type: {type(hidden_states)}")
+
+        # Do not apply ff_out (final projection layer), as it's handled by self.lm_head
+        return hidden_states
+
+    def get_eos_logits(self, input_text):
+        """
+        Get the logits for the EOS token directly.
+        
+        Args:
+            input_text: The input text for which to get the EOS logits.
+        
+        Returns:
+            eos_logits: Logits corresponding to the EOS token.
+        """
+        # Tokenize and prepare the input
+        input_ids = self.tokenizer(input_text, return_tensors="pt").input_ids.to(self.device)
+
+        # Full tensor with mask_id
+        x = torch.full((1, 1024), 126336, dtype=torch.long).to(self.device)
+        x[:, : input_ids.shape[1]] = input_ids.clone()
+
+        # Forward pass through the model components
+        hidden_states = self.transformer["wte"](x)
+        hidden_states = self.transformer["emb_drop"](hidden_states)
+
+        # Safely process through blocks
         for block in self.transformer["blocks"]:
             hidden_states = block(hidden_states)
 
-        # Do not apply ff_out (final projection layer)
-        return hidden_states
+        # Final layer norm and language model head
+        hidden_states = self.transformer["ln_f"](hidden_states)
+        logits = self.lm_head(hidden_states)
+
+        # Extract EOS logits
+        eos_logits = logits[:, :, self.tokenizer.eos_token_id].squeeze(0)  # (1024)
+        
+        return eos_logits
