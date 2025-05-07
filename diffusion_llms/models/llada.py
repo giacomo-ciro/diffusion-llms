@@ -13,8 +13,8 @@ class LladaBackbone(pl.LightningModule):
 
     def __init__(self):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Base")
-        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Base")
+        self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
+        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
         # The transformer model
         self.transformer = base_model.model.transformer
 
@@ -25,8 +25,8 @@ class LladaBackbone(pl.LightningModule):
         self.loss = 0
 
     def forward(self, input_ids, target):
-        self.transformer(input_ids)
-        logits = self.lm_head(input_ids)
+        hidden_states = self.forward_hidden_repr(input_ids)
+        logits = self.lm_head(hidden_states)
         return logits
 
     def training_step(self, batch, batch_idx):
@@ -199,3 +199,32 @@ class LladaBackbone(pl.LightningModule):
         self.transformer.to(device)
         self.lm_head.to(device)
         return self
+    
+    def forward_hidden_repr(self, input_ids, attention_mask=None):
+        """
+        Forward pass through the transformer encoder to obtain the hidden states,
+        excluding the final language modeling head (ff_out).
+        
+        Args:
+            input_ids: Tensor of shape (batch_size, sequence_length)
+            attention_mask: Optional tensor of shape (batch_size, sequence_length)
+            
+        Returns:
+            hidden_states: Tensor of shape (batch_size, sequence_length, hidden_dim)
+        """
+        # Get embedding from wte (word token embedding)
+        embedding_layer = self.transformer["wte"]
+        hidden_states = embedding_layer(input_ids)
+        
+        # Apply dropout and layer norm if present
+        if "emb_drop" in self.transformer:
+            hidden_states = self.transformer["emb_drop"](hidden_states)
+        if "ln_f" in self.transformer:
+            hidden_states = self.transformer["ln_f"](hidden_states)
+
+        # Pass through the transformer blocks (encoder layers)
+        for block in self.transformer["blocks"]:
+            hidden_states = block(hidden_states)
+
+        # Do not apply ff_out (final projection layer)
+        return hidden_states
