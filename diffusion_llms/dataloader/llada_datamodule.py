@@ -3,6 +3,7 @@ import os
 
 import torch
 import numpy as np
+import pandas as pd
 import lightning as pl
 from torch.utils.data import Dataset, DataLoader
 import sys
@@ -11,10 +12,17 @@ import tiktoken
 
 
 class RegressionDataset(Dataset):
-    def __init__(self, config: dict, tokenizer: tiktoken.Encoding):
+    def __init__(
+        self, 
+        config: dict, 
+        tokenizer: tiktoken.Encoding,
+        data_df: pd.DataFrame
+    ):
         super().__init__()
+        self.config = config
         self.tokenizer = tokenizer
-        self.csv_path_rel = config["llada_train_path"]
+        self.csv_path = config["llada_train_path"]
+        self.data_df = data_df
         
         self.prompts: list[str] = self.data_df["user_prompt"].astype(str).tolist()
         self.answers: list[str] = self.data_df["model_response"].astype(str).tolist()
@@ -114,31 +122,113 @@ class RegressionDataset(Dataset):
 
 
 class ClassificationDataset(Dataset):
-    def __init__(self, config: dict):
+    def __init__(
+        self, 
+        config: dict, 
+        tokenizer: tiktoken.Encoding, 
+        data_df: pd.DataFrame
+    ):
         super().__init__()
+        self.config = config
+        self.tokenizer = tokenizer
+        self.data_df = data_df
         
-        # Open cvs with prompts
-        self.prompts
-        self.answers
+        self.prompts: list[str] = self.data_df["user_prompt"].astype(str).tolist()
+        self.answers: list[str] = self.data_df["model_response"].astype(str).tolist()
 
-        # Load raw data
         self.length = len(self.prompts)
+        print(f"ClassificationDataset: Initialized with {self.length} samples.")
 
-
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
     def __getitem__(self, idx):
-        
-        # Get elements at idx
-        prompt = self.prompts[idx]
-        ans = self.answers[idx]
+        """
+        Retrieves and processes a prompt-response pair at the specified index.
 
-        # Concat & create mask
-        X = concat(prompt, ans)
-        y = # 0,1 is eos or not
-        msk = torch.zeros_like(X)
-        # add ones at answer + eos positions
+        This method prepares data for the classification task where the model predicts
+        whether each token is an EOS token. It tokenizes prompt and answer, creates
+        an input sequence (X) by combining them with padding/truncation, creates a
+        target sequence (y) indicating EOS positions, and generates a mask (msk)
+        identifying answer tokens in the input sequence for loss calculation.
+
+        Args:
+            idx (int): Index of the sample to retrieve
+
+        Returns:
+            tuple: Contains:
+                - X (torch.Tensor): Input token sequence [context_length]
+                - y (torch.Tensor): Target EOS labels [context_length]
+                - msk (torch.Tensor): Boolean mask marking answer tokens [context_length]
+        """
+
+        prompt_str: str = self.prompts[idx]
+        answer_str: str = self.answers[idx]
+
+        eos_token_id: int = self.config.get("eos_token_id", 50256)
+        pad_token_id: int = self.config.get("pad_token_id", 50257)
+        context_length: int = self.config.get("context_length", 1024)
+
+        # Tokenize the prompt and answer strings
+        tokenized_prompt: list[int] = self.tokenizer.encode(prompt_str)
+        tokenized_answer: list[int] = self.tokenizer.encode(answer_str)
+        tokenized_answer_with_eos: list[int] = tokenized_answer + [eos_token_id]
+
+        # Prepare input X: concatenate, pad/truncate
+        X_token_ids: list[int] = [pad_token_id] * context_length
+        len_prompt: int = len(tokenized_prompt)
+        len_answer_eos: int = len(tokenized_answer_with_eos)
+
+        actual_len_prompt_in_X: int = 0
+        actual_len_answer_in_X: int = 0
+
+        if len_prompt >= context_length:
+            X_token_ids[:context_length] = tokenized_prompt[:context_length]
+            actual_len_prompt_in_X = context_length
+            # actual_len_answer_in_X remains 0
+        else:
+            X_token_ids[:len_prompt] = tokenized_prompt
+            actual_len_prompt_in_X = len_prompt
+
+            remaining_space: int = context_length - len_prompt
+            num_answer_tokens_to_copy: int = min(remaining_space, len_answer_eos)
+
+            if num_answer_tokens_to_copy > 0:
+                X_token_ids[len_prompt : len_prompt + num_answer_tokens_to_copy] = \
+                    tokenized_answer_with_eos[:num_answer_tokens_to_copy]
+                actual_len_answer_in_X = num_answer_tokens_to_copy
+
+        X: torch.Tensor = torch.tensor(X_token_ids, dtype=torch.long)
+
+        # Prepare the target 'y' for classification: 1 if EOS, 0 otherwise
+        # Initialize y with zeros
+        y_np = np.zeros(context_length, dtype=int)
+        # Iterate through the actual tokens placed in X (not the padding)
+        for i in range(actual_len_prompt_in_X + actual_len_answer_in_X):
+            if X_token_ids[i] == eos_token_id:
+                y_np[i] = 1
+        y: torch.Tensor = torch.from_numpy(y_np).long() # Shape [context_length]
+
+        # Prepare mask msk: True for answer+EOS part in X
+        msk_np = np.zeros(context_length, dtype=bool)
+        ans_start_idx_in_X: int = actual_len_prompt_in_X
+        ans_end_idx_in_X: int = actual_len_prompt_in_X + actual_len_answer_in_X
+
+        if actual_len_answer_in_X > 0:
+            msk_np[ans_start_idx_in_X:ans_end_idx_in_X] = True
+
+        msk: torch.Tensor = torch.from_numpy(msk_np)
+
+        # ===== TEMPLATE =====
+        # # Get elements at idx
+        # prompt = self.prompts[idx]
+        # ans = self.answers[idx]
+
+        # # Concat & create mask
+        # X = concat(prompt, ans)
+        # y = # 0,1 is eos or not
+        # msk = torch.zeros_like(X)
+        # # add ones at answer + eos positions
         
         return X, y, msk
     
@@ -149,7 +239,7 @@ class DataModule(pl.LightningDataModule):
     """
     def __init__(
         self, 
-        config_path
+        config_path : str
     ):
         super().__init__()
 
@@ -159,36 +249,67 @@ class DataModule(pl.LightningDataModule):
         self.batch_size = self.config["batch_size"]
         self.val_test_perc = self.config["val_test_perc"]
         self.num_workers = 2
-    
+
+        self.tokenizer = tiktoken.get_encoding("gpt2") 
+
+        self.csv_path = self.config["llada_train_path"]
+        self.data_df = pd.read_csv(self.csv_path)
+
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
+
     def setup(self, stage=None):
-        
-        if task == "classification":
-            # when iterated over, returns (X, y, msk) of shape
-            # X = [B, context_length]
-            # y = [B, context_length]
-            # msk = [B, context_length]     (1 if belongs to answer + eos, 0 if belongs to prompt)
-            self.data = ClassificationDataset(
-                self.config
-            )
-            
-        elif task == "regression":
-            # when iterated over, returns (X, y, msk) of shape
-            # X = [B, context_length]   
-            # y = [B, 1]                
-            # msk = [B, context_length]     (1 if belongs to answer + eos, 0 if belongs to prompt)
-            self.data = RegressionDataset(
-                self.config
-            )
+        task_type = self.config.get("task_type")
+
+        print(f"AuxiliaryTaskDataModule: Setting up for task '{task_type}'...")
+
+        if task_type == "classification":
+            self.data = ClassificationDataset(self.config, self.tokenizer, self.data_df)
+        elif task_type == "regression":
+            self.data = RegressionDataset(self.config, self.tokenizer, self.data_df)
         else:
-            print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
-            sys.exit()
-        
+            raise ValueError(f"Invalid 'aux_task_type': {task_type}. Must be 'regression' or 'classification'.")
+
         # Split the dataset
         assert self.val_test_perc < 1.0
+        total_size = len(self.data)
+        val_size = int(self.val_test_perc * total_size)
+        test_size = int(self.val_test_perc * total_size)
+        train_size = total_size - val_size - test_size
+
+        # Use a generator for reproducible splits
+        seed = self.config.get("seed")
+        generator = torch.Generator().manual_seed(seed)
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
-            self.data,
-            [1.0 - 2*self.val_test_perc, self.val_test_perc, self.val_test_perc]
+            self.data, [train_size, val_size, test_size], generator=generator
         )
+        print(f"Dataset split: Train={len(self.train_dataset)}, Val={len(self.val_dataset)}, Test={len(self.test_dataset)}")
+
+        # ===== TEMPLATE =====
+        # if task == "classification":
+        #     # when iterated over, returns (X, y, msk) of shape
+        #     # X = [B, context_length]
+        #     # y = [B, context_length]
+        #     # msk = [B, context_length]     (1 if belongs to answer + eos, 0 if belongs to prompt)
+        #     self.data = ClassificationDataset(self.config)
+            
+        # elif task == "regression":
+        #     # when iterated over, returns (X, y, msk) of shape
+        #     # X = [B, context_length]   
+        #     # y = [B, 1]                
+        #     # msk = [B, context_length]     (1 if belongs to answer + eos, 0 if belongs to prompt)
+        #     self.data = RegressionDataset(self.config)
+        # else:
+        #     print(f"[!] Can't find {self.memmap_path}, please create it using prepare.py")
+        #     sys.exit()
+        
+        # # Split the dataset
+        # assert self.val_test_perc < 1.0
+        # self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(
+        #     self.data,
+        #     [1.0 - 2*self.val_test_perc, self.val_test_perc, self.val_test_perc]
+        # )
     
     def train_dataloader(self):
         return DataLoader(
