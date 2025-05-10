@@ -1,0 +1,3 @@
+[submodule "diffusion_llms/LLaDA"]
+	path = diffusion_llms/LLaDA
+	url = https://github.com/HKUNLP/DiffuLLaMA
