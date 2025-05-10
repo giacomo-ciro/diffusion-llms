@@ -2,6 +2,7 @@ import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 import torch
 from typing import List, Tuple
+import os
 
 class LengthPredictDataset(Dataset):
     def __init__(
@@ -82,8 +83,14 @@ class DataModule:
         # Split the dataset
         assert self.val_test_perc < 1.0
         # Load the dataset
-        train_df = pd.read_csv("/Users/vittorio/Projects/uni/Deep learning/diffusion-llms/diffusion_llms/data/train.csv")
-        test_df = pd.read_csv("/Users/vittorio/Projects/uni/Deep learning/diffusion-llms/diffusion_llms/data/test.csv")
+        path_to_data= os.path.join(    
+            os.path.dirname(os.path.dirname(__file__)),
+            "data"
+        )
+        path_to_train = os.path.join(path_to_data, "train.csv")
+        path_to_test = os.path.join(path_to_data, "test.csv")
+        train_df = pd.read_csv(path_to_train)
+        test_df = pd.read_csv(path_to_test)
 
         # Prepare datasets
         train_prompts = train_df["user_prompt"].tolist()
