@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 
 class PromptDataset(Dataset):
-    def __init__(self, data, tokenizer, max_len=64):
+    def __init__(self, data, tokenizer, max_len=512):
         self.data = data
         self.tokenizer = tokenizer
         self.max_len = max_len
@@ -24,10 +24,10 @@ class PromptDataset(Dataset):
             'label': torch.tensor(label, dtype=torch.long)
         }
     
-def get_length(responses, tokenizer, steps = [32, 64, 128, 256, 512]):
+def get_length(responses, tokenizer, max_length, steps):
     lengths = []
     for response in responses:
-        enc = tokenizer(response, padding=False, truncation=True, max_length=512)
+        enc = tokenizer(response, padding=False, truncation=True, max_length=max_length)
         length = len(enc['input_ids'])
         for i, step in enumerate(steps):
             if length <= step:
