@@ -500,7 +500,7 @@ class DiffuGPT(pl.LightningModule):
             top_k=top_k,
             denoising_strategy=denoising_strategy,
             diffusion_steps = diffusion_steps,
-            var_len=var_len,
+            # var_len=var_len,
         )
         return xs
         

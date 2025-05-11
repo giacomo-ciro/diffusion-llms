@@ -133,3 +133,18 @@ def crop_to_var_len(model: Any, eos_token_id: int, x: torch.Tensor, attention_ma
     x[left_eos_mask] = pad_token_id or eos_token_id
 
     return x # [B, max_length]
+
+
+
+def get_device():
+    """Get the device to use for PyTorch operations (CPU or cuda or MPS)."""
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("Using CUDA")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("Using MPS (Apple Silicon)")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU")
+    return device
