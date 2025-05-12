@@ -108,7 +108,7 @@ class VarLenLLada(nn.Module):
     ):
         super().__init__()
         # Backbone transformer
-        self.backbone = AutoModel.from_pretrained(pretrained_model_name)
+        self.backbone = AutoModel.from_pretrained(pretrained_model_name, trust_remote_code=True)
         # Freeze backbone to reuse hidden states without recomputing graph
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -284,7 +284,7 @@ def main():
     init_wandb(config)
     
     # Tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_model, trust_remote_code=True)
     # DataModule
     datamodule = DataModule(config, tokenizer)
     datamodule.setup()

@@ -45,7 +45,7 @@ def flatten_config(config):
     # Model config
     flat_config["pretrained_model_name"] = config["model"]["pretrained_model_name"]
     flat_config["context_length"] = config["model"]["context_length"]
-    flat_config["context_length"] = config["model"]["context_length"]
+    flat_config["max_length"] = config["model"]["context_length"]
     
     # Training config
     flat_config["batch_size"] = config["training"]["batch_size"]
