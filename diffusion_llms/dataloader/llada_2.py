@@ -53,7 +53,7 @@ class LengthPredictDataset(Dataset):
             dtype=torch.long,
         )
 
-        res_length = prompt_len - prompt.shape[1] # this is the length of the prompt
+        res_length = torch.tensor(prompt_len - prompt.shape[1], dtype=torch.float)
 
         return {
             "input_ids": x.squeeze(0), # [1, max_length]

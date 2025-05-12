@@ -197,7 +197,7 @@ def eval_epoch(model, dataloader, device, best_metrics=None):
         loss_clf = loss_fn_clf(logits, eos_labels)
 
         preds = model.regress(pooled)
-        loss_reg = loss_fn_reg(preds, true_length)
+        loss_reg = loss_fn_reg(preds, true_length)  # Convert to float here
 
         preds_full = model.regress_no_pool(last_hidden)
         loss_reg_full = loss_fn_reg(preds_full, true_length)
