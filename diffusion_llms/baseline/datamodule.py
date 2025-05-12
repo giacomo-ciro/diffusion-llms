@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModel
-from sklearn.model_selection import train_test_split
+from torch.utils.data import Dataset
+
 
 
 class PromptDataset(Dataset):
@@ -33,4 +32,12 @@ def get_length(responses, tokenizer, max_length, steps):
             if length <= step:
                 lengths.append(i)
                 break
+    return lengths
+
+
+def get_length_reg(responses, tokenizer):
+    lengths = []
+    for response in responses:
+        enc = tokenizer(response, padding=False)
+        lengths.append(len(enc['input_ids']))
     return lengths

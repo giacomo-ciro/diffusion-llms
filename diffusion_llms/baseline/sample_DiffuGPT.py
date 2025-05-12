@@ -5,10 +5,12 @@ import sys
 import tiktoken
 import torch
 from diffusion_llms.models.gpt2_diffusion import DiffuGPT
-from diffusion_llms.baseline.model_baseline import DistilBertClassifier
+from diffusion_llms.baseline.model_baseline import DistilBertClassifier, DistilBertRegressor
 from diffusion_llms.utils import get_device
 from transformers import AutoTokenizer
 
+
+TYPE_OF_PREDICTOR = "regressor"  # "classifier" or "regressor"
 
 # From the command line we can specify the config.file
 if len(sys.argv) == 2:
@@ -27,21 +29,41 @@ if config["user_prompt"]:
 else:
     prompt = "What is the capital of France?"
 
-# Create DistilBERT classifier to predict the length of the answer
-length_tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-length_predictor_model = DistilBertClassifier(n_classes=5)
-length_predictor_model.load_state_dict(torch.load("diffusion_llms/baseline/checkpoints/DistilBERT_1.pth"))
-length_predictor_model.to(device)
-length_predictor_model.eval()
-steps = [32, 64, 128, 256, 512]
 
-# Get the length of the answer
-with torch.no_grad():
-    input_enc = length_tokenizer(prompt, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
-    logits, _ = length_predictor_model(input_enc['input_ids'], input_enc['attention_mask'])
-    pred = torch.argmax(logits, dim=1)
-    max_new_tokens = steps[pred.item()]
-    print("MAX_NEW_TOKENS", max_new_tokens)
+if TYPE_OF_PREDICTOR == "classifier":
+    # Create DistilBERT classifier to predict the length of the answer
+    length_tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    length_predictor_model = DistilBertClassifier(n_classes=5)
+    length_predictor_model.load_state_dict(torch.load("diffusion_llms/baseline/checkpoints/DistilBERT_1.pth"))
+    length_predictor_model.to(device)
+    length_predictor_model.eval()
+    steps = [32, 64, 128, 256, 512]
+
+    # Get the length of the answer
+    with torch.no_grad():
+        input_enc = length_tokenizer(prompt, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
+        logits, _ = length_predictor_model(input_enc['input_ids'], input_enc['attention_mask'])
+        pred = torch.argmax(logits, dim=1)
+        max_new_tokens = steps[pred.item()]
+        print("MAX_NEW_TOKENS", max_new_tokens)
+
+
+if TYPE_OF_PREDICTOR == "regressor":
+    # Create DistilBERT regressor to predict the length of the answer
+    length_tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    length_predictor_model = DistilBertRegressor()
+    length_predictor_model.load_state_dict(torch.load("diffusion_llms/baseline/checkpoints/DistilBERT_DGPT_reg.pth"))
+    length_predictor_model.to(device)
+    length_predictor_model.eval()
+
+    # Get the length of the answer
+    with torch.no_grad():
+        input_enc = length_tokenizer(prompt, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
+        pred, _ = length_predictor_model(input_enc['input_ids'], input_enc['attention_mask'])
+        max_new_tokens = int(pred.item())
+        print("MAX_NEW_TOKENS", max_new_tokens)
+
+
 
 
 # Tokenize
