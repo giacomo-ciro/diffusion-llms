@@ -1,167 +1,301 @@
-import pytorch_lightning as pl
+#!/usr/bin/env python
+"""
+Script to train a single LLaDA model (classifier, regressor, or full_regressor)
+using PyTorch Lightning and precomputed embeddings.
+"""
+
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim import AdamW
-from pytorch_lightning.callbacks import EarlyStopping
-from transformers import AutoModel, AutoTokenizer
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.metrics import roc_auc_score
 
-class LLadaLightning(pl.LightningModule):
+# Import the embedded data module
+from diffusion_llms.dataloader.llada_from_file import EmbeddedDataModule
+from diffusion_llms.input_helper import get_config
+
+class LLaDaClassifier(nn.Module):
+    """Classification head for LLaDA"""
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.classifier = nn.Linear(hidden_size, 1)
+    
+    def forward(self, hidden_states):
+        return self.classifier(hidden_states).squeeze(-1)
+
+class LLaDaRegressor(nn.Module):
+    """Regression head for LLaDA using pooled output"""
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.regressor = nn.Linear(hidden_size, 1)
+    
+    def forward(self, pooled):
+        return self.regressor(pooled).squeeze(-1)
+
+class LLaDaFullRegressor(nn.Module):
+    """Regression head for LLaDA using all hidden states"""
+    def __init__(self, hidden_size, context_length):
+        super().__init__()
+        self.full_regressor = nn.Linear(hidden_size * context_length, 1)
+    
+    def forward(self, hidden_states):
+        batch_size = hidden_states.size(0)
+        flattened = hidden_states.view(batch_size, -1)
+        return self.full_regressor(flattened).squeeze(-1)
+
+class LLaDaTrainer(pl.LightningModule):
+    """
+    PyTorch Lightning module for training a single LLaDA model.
+    """
     def __init__(
-        self, 
-        pretrained_model_name="GSAI-ML/LLaDA-8B-Instruct", 
-        context_length=4096,
+        self,
+        model_type,
+        hidden_size,
+        context_length,
         learning_rate=1e-5,
-        pos_weight=10.0  # For imbalanced classification
+        pos_weight=10.0
     ):
         super().__init__()
         self.save_hyperparameters()
         
-        # Model components
-        self.backbone = AutoModel.from_pretrained(pretrained_model_name, trust_remote_code=True)
-        # Freeze backbone
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-        
-        hidden_size = self.backbone.config.hidden_size
-        
-        # Classification head with balanced loss
-        self.classifier = nn.Linear(hidden_size, 1)
-        self.pos_weight = torch.tensor([pos_weight])
-        
-        # Regression head with normalized outputs
-        self.regressor = nn.Sequential(
-            nn.Linear(hidden_size, 1),
-            nn.Sigmoid()  # Outputs between 0-1
-        )
-        
-        # Full sequence regressor
-        self.full_regressor = nn.Sequential(
-            nn.Linear(hidden_size * context_length, 1),
-            nn.Sigmoid()  # Outputs between 0-1
-        )
-        
+        # Initialize the selected model
+        self.model_type = model_type
+        self.hidden_size = hidden_size
         self.context_length = context_length
         self.learning_rate = learning_rate
-    
-    def forward_backbone(self, input_ids, attention_mask=None):
-        # Get hidden states
-        outputs = self.backbone(
-            input_ids=input_ids, 
-            attention_mask=attention_mask,
-            return_dict=True,
-            output_hidden_states=True
-        )
+        self.pos_weight = torch.tensor([pos_weight])
         
-        # Get last layer hidden states
-        last_hidden = outputs.hidden_states[-1]
-        
-        # Mean pooling for sequence representation
-        if attention_mask is not None:
-            # Create mask for mean pooling
-            mask = attention_mask.unsqueeze(-1).expand(last_hidden.size()).float()
-            sum_hidden = torch.sum(last_hidden * mask, dim=1)
-            sum_mask = torch.sum(mask, dim=1)
-            pooled = sum_hidden / sum_mask
+        if model_type == "classifier":
+            self.model = LLaDaClassifier(hidden_size)
+        elif model_type == "regressor":
+            self.model = LLaDaRegressor(hidden_size)
+        elif model_type == "full_regressor":
+            self.model = LLaDaFullRegressor(hidden_size, context_length)
         else:
-            pooled = torch.mean(last_hidden, dim=1)
-        
-        return last_hidden, pooled
+            raise ValueError(f"Unknown model type: {model_type}")
     
-    def shared_step(self, batch, batch_idx, step_type="train"):
-        input_ids = batch["input_ids"]
-        eos_labels = batch["eos_labels"].float()
-        true_length = batch["true_length"]
-        
-        # Normalize true_length to 0-1 range
-        normalized_true_length = true_length.float() / self.context_length
-        
-        # Get hidden states
-        last_hidden, pooled = self.forward_backbone(input_ids)
-        
-        # Classification (token-level)
-        logits = self.classifier(last_hidden).squeeze(-1)
-        loss_clf = F.binary_cross_entropy_with_logits(
-            logits, eos_labels, 
-            pos_weight=self.pos_weight.to(eos_labels.device)
-        )
-        
-        # Regression (sequence-level)
-        preds = self.regressor(pooled).squeeze(-1)
-        loss_reg = F.mse_loss(preds, normalized_true_length)
-        
-        # Full regression
-        preds_full = self.full_regressor(last_hidden.view(last_hidden.size(0), -1)).squeeze(-1)
-        loss_reg_full = F.mse_loss(preds_full, normalized_true_length)
-    
-        
-        # Log metrics
-        self.log(f"{step_type}/loss_clf", loss_clf, prog_bar=True)
-        self.log(f"{step_type}/loss_reg", loss_reg, prog_bar=True)
-        self.log(f"{step_type}/loss_reg_full", loss_reg_full, prog_bar=True)
-        
-        # Calculate accuracy for classification
-        with torch.no_grad():
-            pred_labels = (torch.sigmoid(logits) > 0.5).float()
-            acc = (pred_labels == eos_labels).float().mean()
-            self.log(f"{step_type}/acc", acc, prog_bar=True)
-        
-        return loss_clf, loss_reg, loss_reg_full
+    def forward(self, x):
+        """Forward pass through the model"""
+        return self.model(x)
     
     def training_step(self, batch, batch_idx):
-        return self.shared_step(batch, batch_idx, "train")
+        # Extract the appropriate data based on model type
+        if self.model_type == "classifier":
+            x = batch["last_hidden"]
+            y = batch["eos_labels"].float()
+            
+            logits = self.model(x)
+            loss = F.binary_cross_entropy_with_logits(
+                logits, y, 
+                pos_weight=self.pos_weight.to(y.device)
+            )
+            
+            # Log metrics
+            self.log('train/loss', loss, prog_bar=True)
+            
+            # Calculate accuracy
+            with torch.no_grad():
+                pred_labels = (torch.sigmoid(logits) > 0.5).float()
+                acc = (pred_labels == y).float().mean()
+                self.log('train/acc', acc, prog_bar=True)
+                
+        elif self.model_type == "regressor":
+            x = batch["pooled"]
+            y = batch["true_length"].float()
+            
+            # Normalize target to 0-1 range
+            y_normalized = y / self.context_length
+            
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            
+            # Log metrics
+            self.log('train/loss', loss, prog_bar=True)
+            
+            # Calculate RMSE in original scale
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('train/rmse', rmse, prog_bar=True)
+                
+        elif self.model_type == "full_regressor":
+            x = batch["last_hidden"]
+            y = batch["true_length"].float()
+            
+            # Normalize target to 0-1 range
+            y_normalized = y / self.context_length
+            
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            
+            # Log metrics
+            self.log('train/loss', loss, prog_bar=True)
+            
+            # Calculate RMSE in original scale
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('train/rmse', rmse, prog_bar=True)
+        
+        return loss
     
     def validation_step(self, batch, batch_idx):
-        return self.shared_step(batch, batch_idx, "val")
+        # Extract the appropriate data based on model type
+        if self.model_type == "classifier":
+            x = batch["last_hidden"]
+            y = batch["eos_labels"].float()
+            
+            logits = self.model(x)
+            loss = F.binary_cross_entropy_with_logits(
+                logits, y, 
+                pos_weight=self.pos_weight.to(y.device)
+            )
+            
+            # Log metrics
+            self.log('val/loss', loss, prog_bar=True)
+            
+            # Calculate additional metrics
+            with torch.no_grad():
+                pred_labels = (torch.sigmoid(logits) > 0.5).float()
+                acc = (pred_labels == y).float().mean()
+                self.log('val/acc', acc, prog_bar=True)
+                
+                # Calculate AUC for flattened predictions
+                flat_logits = logits.view(-1)
+                flat_labels = y.view(-1)
+                try:
+                    # AUC can fail if there's only one class in the batch
+                    auc = roc_auc_score(
+                        flat_labels.cpu().numpy(), 
+                        torch.sigmoid(flat_logits).cpu().numpy()
+                    )
+                    self.log('val/auc', auc, prog_bar=True)
+                except:
+                    pass
+                
+        elif self.model_type == "regressor":
+            x = batch["pooled"]
+            y = batch["true_length"].float()
+            
+            # Normalize target to 0-1 range
+            y_normalized = y / self.context_length
+            
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            
+            # Log metrics
+            self.log('val/loss', loss, prog_bar=True)
+            
+            # Calculate RMSE in original scale
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('val/rmse', rmse, prog_bar=True)
+                
+        elif self.model_type == "full_regressor":
+            x = batch["last_hidden"]
+            y = batch["true_length"].float()
+            
+            # Normalize target to 0-1 range
+            y_normalized = y / self.context_length
+            
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            
+            # Log metrics
+            self.log('val/loss', loss, prog_bar=True)
+            
+            # Calculate RMSE in original scale
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('val/rmse', rmse, prog_bar=True)
+        
+        return {'val_loss': loss}
     
     def test_step(self, batch, batch_idx):
-        return self.shared_step(batch, batch_idx, "test")
+        # Same as validation step
+        return self.validation_step(batch, batch_idx)
     
     def configure_optimizers(self):
-        # Separate optimizers for different components
-        optimizer_clf = AdamW(self.classifier.parameters(), lr=self.learning_rate)
-        optimizer_reg = AdamW(self.regressor.parameters(), lr=self.learning_rate)
-        optimizer_reg_full = AdamW(self.full_regressor.parameters(), lr=self.learning_rate)
-        
-        return [optimizer_clf, optimizer_reg, optimizer_reg_full]
+        """Configure optimizer for the model"""
+        return torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate)
 
-# Main training function
-def train_llada_lightning():
-    # Load data
-    tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
-    datamodule = DataModule(config, tokenizer)
+
+def main():
+    args = get_config()    
+    # Create output directory
+    os.makedirs(args["output_dir"], exist_ok=True)
     
-    # Calculate positive weight for imbalanced dataset
-    # (This would require one pass through dataset, could be pre-calculated)
-    pos_weight = 10.0  # Default value, adjust based on dataset
+    # Create config for data module
+    
+    # Create data module
+    data_module = EmbeddedDataModule(
+        args, 
+        args["embedding_dir"], 
+        num_workers=args["num_workers"]
+    )
+    data_module.setup()
     
     # Create model
-    model = LLadaLightning(
-        pretrained_model_name="GSAI-ML/LLaDA-8B-Instruct",
-        context_length=config["context_length"],
-        learning_rate=1e-5,
-        pos_weight=pos_weight
+    model = LLaDaTrainer(
+        model_type=args["type"],
+        hidden_size=args["hidden_size"],
+        context_length=args["context_length"],
+        learning_rate=args["learning_rate"],
+        pos_weight=args["pos_weight"]
     )
     
-    # Early stopping callback
-    early_stop_callback = EarlyStopping(
-        monitor='val/loss',
-        min_delta=0.001,
-        patience=3,
-        verbose=True,
-        mode='min'
+    # Set up logging
+    logger = WandbLogger(
+        project=args["project_name"],
+        name=args["run_name"] or f"llada-{args['model_type']}",
+        save_dir=args["output_dir"]
     )
+    
+    # Create callbacks
+    callbacks = [
+        # Model checkpoint
+        ModelCheckpoint(
+            dirpath=os.path.join(args["output_dir"], 'checkpoints'),
+            filename=f'{args["model_type"]}-{{epoch:02d}}-{{val/loss:.4f}}',
+            monitor='val/loss',
+            mode='min',
+            save_top_k=3
+        ),
+        
+        # Early stopping
+        EarlyStopping(
+            monitor='val/loss',
+            patience=args["patience"],
+            mode='min',
+            verbose=True
+        )
+    ]
     
     # Create trainer
     trainer = pl.Trainer(
-        max_epochs=10,
-        callbacks=[early_stop_callback],
-        gpus=1 if torch.cuda.is_available() else 0,
-        log_every_n_steps=10,
-        val_check_interval=0.1  # Validate every 10% of training
+        max_epochs=args["max_epochs"],
+        accelerator='auto',  # Automatically use GPU if available
+        devices=1,
+        logger=logger,
+        callbacks=callbacks,
+        val_check_interval=args["val_check_interval"],
+        log_every_n_steps=10
     )
     
     # Train model
-    trainer.fit(model, datamodule)
+    trainer.fit(model, data_module, ckpt_path=args["resume"])
     
-    return model
+    # Save final model
+    trainer.save_checkpoint(os.path.join(args["output_dir"], f'final_{args["model_type"]}_model.ckpt'))
+    
+    # Test model
+    trainer.test(model, data_module)
+    
+    final_model_path = os.path.join(args["output_dir"], f"final_{args['model_type']}_model.ckpt")
+    print(f"Training completed! Final model saved to: {final_model_path}")
+
+
+if __name__ == "__main__":
+    main()

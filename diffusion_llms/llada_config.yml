@@ -1,7 +1,17 @@
+# LLaDA Training Configuration
+
 # Model configuration
 model:
   pretrained_model_name: "GSAI-ML/LLaDA-8B-Instruct"
-  context_length: 4096
+  hidden_size: 4096
+  context_length: 1024
+  pos_weight: 0.277  # For classification model
+
+# Data configuration
+data:
+  embedding_dir: "/Users/vittorio/Projects/uni/Deep learning/diffusion-llms/embedded_datasets"
+  num_workers: 4
+  val_test_perc: 0.05
 
 # Training parameters
 training:
@@ -11,10 +21,10 @@ training:
   accumulate_grad: 1
   max_steps: 5000
   seed: 42
+  val_check_interval: 0.25
 
 # Validation parameters
 validation:
-  val_test_perc: 0.05
   val_check_steps: 100
 
 # Checkpoint parameters
@@ -27,9 +37,23 @@ checkpoint:
 early_stopping:
   patience: 3
   min_delta: 0.001
+  monitor: "val/loss"
+  mode: "min"
 
 # Logging and monitoring
 logging:
   run_name: "variable-length-llada"
   project_name: "diffusion-llms"
   log_dir: "./logs"
+
+# Model-specific configurations
+model_to_train:
+  type: "classifier"  # Options: "classifier", "regressor", "full_regressor"
+  output_dir: "./models/classifier"
+  pos_weight: 0.277
+  
+  #regressor:
+  #  output_dir: "./models/regressor"
+  #
+  #full_regressor:
+  #  output_dir: "./models/full_regressor"
