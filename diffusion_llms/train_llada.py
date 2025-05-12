@@ -185,7 +185,8 @@ def eval_epoch(model, dataloader, device, best_metrics=None):
     total_loss_reg_full = 0.0
     num_batches = 0
 
-    for batch in dataloader:
+    val_pbar = tqdm(dataloader, desc="[VAL]", leave=False)
+    for batch in val_pbar:
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         eos_labels = batch["eos_labels"].float().to(device)
@@ -214,6 +215,16 @@ def eval_epoch(model, dataloader, device, best_metrics=None):
         all_true_lengths.append(true_length.detach().cpu())
 
         num_batches += 1
+
+        avg_loss_clf = total_loss_cat / num_batches
+        avg_loss_reg = total_loss_reg / num_batches
+        avg_loss_reg_full = total_loss_reg_full / num_batches
+
+        val_pbar.set_postfix({
+            'loss_clf': f"{avg_loss_clf:.4f}",
+            'loss_reg': f"{avg_loss_reg:.4f}",
+            'loss_reg_full': f"{avg_loss_reg_full:.4f}"
+        })
 
     # Flatten across batches
     flat_logits = torch.cat(all_logits).flatten()

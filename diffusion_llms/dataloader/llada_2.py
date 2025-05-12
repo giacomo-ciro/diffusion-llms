@@ -3,8 +3,9 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 from typing import List, Tuple
 import os
+import pytorch_lightning as pl
 
-class LengthPredictDataset(Dataset):
+class LengthPredictDataset(pl.LightningDataModule):
     def __init__(
         self,
         tokenizer,
