@@ -123,7 +123,7 @@ class VarLenLLada(nn.Module):
             hidden_size * context_length, 1
         )  # uses full hidden states
 
-    def forward_backbone(self, input_ids, attention_mask):
+    def forward_backbone(self, input_ids, attention_mask=None):
         # Compute hidden states once
         outputs = self.backbone(
             input_ids=input_ids, attention_mask=attention_mask, return_dict=True
@@ -259,7 +259,6 @@ def main():
     # Settings
     pretrained_model = "GSAI-ML/LLaDA-8B-Instruct"
     lr = 1e-5
-    batch_size = 8
     epochs = 3
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config = get_config()
@@ -381,12 +380,12 @@ def main():
                 )
 
             input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
+
             eos_labels = batch["eos_labels"].float().to(device)
             true_length = batch["true_length"].to(device)
 
             # Compute hidden states WITH gradients
-            last_hidden, pooled = model.forward_backbone(input_ids, attention_mask)
+            last_hidden, pooled = model.forward_backbone(input_ids)
 
             last_hidden = last_hidden.detach()  # Detach to avoid recomputing graph
             pooled = pooled.detach()  # Detach to avoid recomputing graph

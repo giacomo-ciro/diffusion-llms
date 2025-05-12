@@ -45,7 +45,7 @@ class LengthPredictDataset(Dataset):
         
 
         # 4) re‐tokenize full_text to find where the prompt ends
-        prompt_len = len(self.tokenizer(full_text)["input_ids"]) - prompt.shape[1] # this is the length of the prompt
+        prompt_len = len(self.tokenizer(full_text)["input_ids"])
         
         # 5) build eos_positions mask
         eos_positions = torch.tensor(
@@ -53,10 +53,13 @@ class LengthPredictDataset(Dataset):
             dtype=torch.long,
         )
 
+        res_length = prompt_len - prompt.shape[1] # this is the length of the prompt
+
         return {
             "input_ids": x.squeeze(0), # [1, max_length]
             "eos_labels": eos_positions,  # your head can predict this
-            "true_length": prompt_len,  # this is the length of the prompt
+            "true_length": res_length,  # this is the length of the prompt
+            "attention_mask": torch.ones_like(x.squeeze(0)),  # attention mask
         }
 
 
