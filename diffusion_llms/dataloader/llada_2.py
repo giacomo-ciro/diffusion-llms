@@ -74,6 +74,7 @@ class DataModule:
         self.tokenizer = tokenizer
         self.num_workers = num_workers
         self.batch_size = self.config["batch_size"]
+        self.context_length = self.config["context_length"]
         self.val_test_perc = self.config["val_test_perc"]
         self.train_dataset: List[Tuple] = None
         self.val_dataset: List[Tuple] = None
@@ -114,19 +115,19 @@ class DataModule:
             self.tokenizer,
             [train_prompts[i] for i in train_indices],
             [train_responses[i] for i in train_indices],
-            max_length=self.config["max_length"],
+            max_length=self.context_length,
         )
         self.val_dataset = LengthPredictDataset(
             self.tokenizer,
             [train_prompts[i] for i in val_indices],
             [train_responses[i] for i in val_indices],
-            max_length=self.config["max_length"],
+            max_length=self.context_length,
         )
         self.test_dataset = LengthPredictDataset(
             self.tokenizer,
             test_prompts,
             test_responses,
-            max_length=self.config["max_length"],
+            max_length=self.context_length,
         )
         print(f"Dataset split: Train={len(self.train_dataset)}, Val={len(self.val_dataset)}, Test={len(self.test_dataset)}")
 

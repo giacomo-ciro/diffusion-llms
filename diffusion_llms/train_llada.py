@@ -262,21 +262,6 @@ def main():
     batch_size = 8
     epochs = 3
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    config = {
-        "batch_size": batch_size,
-        "val_test_perc": 0.005,
-        "seed": 42,
-        "max_length": 4096,
-        "accumulate_grad": 1,
-        "n_epochs": epochs,
-        "n_steps": 1000,
-        "val_check_steps": 100,
-        "checkpoint_dir": "./checkpoints",  # Directory to save checkpoints
-        "checkpoint_steps": 200,           # Save checkpoint every N steps
-        "resume_from_checkpoint": None,    # Path to checkpoint to resume from, or None
-        "run_name": None,                  # Name for wandb run
-    }
-
     config = get_config()
     # Create checkpoint directory
     os.makedirs(config["checkpoint_dir"], exist_ok=True)
