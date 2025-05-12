@@ -124,12 +124,30 @@ class VarLenLLada(nn.Module):
         )  # uses full hidden states
 
     def forward_backbone(self, input_ids, attention_mask=None):
-        # Compute hidden states once
+        # Enable hidden states in the output
         outputs = self.backbone(
-            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+            input_ids=input_ids, 
+            attention_mask=attention_mask, 
+            return_dict=True,
+            output_hidden_states=True  # This is crucial to get hidden states
         )
-        last_hidden = outputs.last_hidden_state  # (batch, seq_len, hidden)
-        pooled = outputs.pooler_output  # (batch, hidden)
+        
+        # Get the last hidden state (last layer's output for all tokens)
+        last_hidden = outputs.hidden_states[-1]  # Shape: [batch_size, seq_len, hidden_dim]
+        
+        # Option 1: Mean pooling (average all token representations)
+        # If you have an attention mask, use it to avoid including padding tokens
+        if attention_mask is not None:
+            # Create a mask that's the same shape as the hidden states
+            mask = attention_mask.unsqueeze(-1).expand(last_hidden.size())
+            # Sum the hidden states and divide by the sum of the mask
+            sum_hidden = torch.sum(last_hidden * mask, dim=1)
+            sum_mask = torch.sum(mask, dim=1)
+            pooled = sum_hidden / sum_mask
+        else:
+            # Simple mean pooling without mask
+            pooled = torch.mean(last_hidden, dim=1)
+        
         return last_hidden, pooled
 
     def classify(self, last_hidden):
