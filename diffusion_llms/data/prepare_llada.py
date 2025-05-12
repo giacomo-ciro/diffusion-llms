@@ -91,7 +91,6 @@ def save_to_h5(data, output_file):
 def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Prepare embedded dataset for LLaDA training')
-    parser.add_argument('--config', type=str, default=None, help='Path to configuration file')
     parser.add_argument('--output_dir', type=str, default='embedded_datasets', help='Directory to save embedded datasets')
     parser.add_argument('--model_name', type=str, default='GSAI-ML/LLaDA-8B-Instruct', help='Pretrained model name')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size for processing')
@@ -102,7 +101,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Load configuration
-    config = get_config(args.config)
+    config = get_config()
     
     # Update batch size if provided
     if args.batch_size:
