@@ -11,6 +11,8 @@ from transformers import AutoModel, AutoTokenizer
 from diffusion_llms.dataloader.llada_2 import DataModule 
 
 
+from diffusion_llms.input_helper import get_config
+
 class EarlyStopper:
     def __init__(self, patience=3, min_delta=0.0, mode='min'):
         self.patience = patience
@@ -37,6 +39,51 @@ class EarlyStopper:
             self.stop = True
 
         return self.stop
+
+
+def save_checkpoint(model, optimizers, epoch, step, metrics, checkpoint_dir):
+    """Save model checkpoint to file."""
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    checkpoint = {
+        'epoch': epoch,
+        'step': step,
+        'model_state_dict': model.state_dict(),
+        'optimizer_clf_state_dict': optimizers['clf'].state_dict(),
+        'optimizer_reg_state_dict': optimizers['reg'].state_dict(),
+        'optimizer_reg_full_state_dict': optimizers['reg_full'].state_dict(),
+        'best_metrics': {
+            'clf': metrics['best_clf'],
+            'reg': metrics['best_reg'],
+            'reg_full': metrics['best_reg_full']
+        }
+    }
+    
+    torch.save(checkpoint, f"{checkpoint_dir}/checkpoint_epoch{epoch}_step{step}.pt")
+    # Also save a "best" checkpoint if this is the best model so far
+    if metrics['is_best']:
+        torch.save(checkpoint, f"{checkpoint_dir}/best_model.pt")
+    
+    print(f"Checkpoint saved at epoch {epoch}, step {step}")
+    wandb.log({"checkpoint_saved": epoch})
+
+
+def load_checkpoint(model, optimizers, checkpoint_path):
+    """Load model checkpoint from file."""
+    if not os.path.exists(checkpoint_path):
+        print(f"Checkpoint not found at {checkpoint_path}")
+        return None
+    
+    checkpoint = torch.load(checkpoint_path)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizers['clf'].load_state_dict(checkpoint['optimizer_clf_state_dict'])
+    optimizers['reg'].load_state_dict(checkpoint['optimizer_reg_state_dict'])
+    optimizers['reg_full'].load_state_dict(checkpoint['optimizer_reg_full_state_dict'])
+    
+    print(f"Loaded checkpoint from epoch {checkpoint['epoch']}, step {checkpoint['step']}")
+    return checkpoint
+
 
 def init_wandb(config, project_name="diffusion-llms"):
     wandb.init(
@@ -102,7 +149,7 @@ class VarLenLLada(nn.Module):
 
 
 @torch.no_grad()
-def eval_epoch(model, dataloader, device):
+def eval_epoch(model, dataloader, device, best_metrics=None):
     model.eval()
 
     loss_fn_clf = nn.BCEWithLogitsLoss()
@@ -165,34 +212,50 @@ def eval_epoch(model, dataloader, device):
     reg_rmse = root_mean_squared_error(true_lengths, reg_preds)
     reg_rmse_full = root_mean_squared_error(true_lengths, reg_preds_full)
 
+    avg_loss_clf = total_loss_cat / num_batches
+    avg_loss_reg = total_loss_reg / num_batches
+    avg_loss_reg_full = total_loss_reg_full / num_batches
+
     wandb.log(
         {
-            "val/loss_clf": total_loss_cat / num_batches,
+            "val/loss_clf": avg_loss_clf,
             "val/acc_clf": clf_acc,
             "val/auc_clf": clf_auc,
-            "val/loss_reg": total_loss_reg / num_batches,
+            "val/loss_reg": avg_loss_reg,
             "val/rmse_reg": reg_rmse,
-            "val/loss_reg_full": total_loss_reg_full / num_batches,
+            "val/loss_reg_full": avg_loss_reg_full,
             "val/rmse_reg_full": reg_rmse_full,
         }
     )
 
     print(
-        f"[VAL] Clf Loss: {total_loss_cat / num_batches:.4f}, Acc: {clf_acc:.4f}, AUC: {clf_auc:.4f} | "
-        f"Reg Loss: {total_loss_reg / num_batches:.4f}, RMSE: {reg_rmse:.2f} | "
-        f"RegFull Loss: {total_loss_reg_full / num_batches:.4f}, RMSE: {reg_rmse_full:.2f}"
+        f"[VAL] Clf Loss: {avg_loss_clf:.4f}, Acc: {clf_acc:.4f}, AUC: {clf_auc:.4f} | "
+        f"Reg Loss: {avg_loss_reg:.4f}, RMSE: {reg_rmse:.2f} | "
+        f"RegFull Loss: {avg_loss_reg_full:.4f}, RMSE: {reg_rmse_full:.2f}"
     )
+    
+    # Check if this is the best model so far
+    is_best = False
+    if best_metrics is not None:
+        if avg_loss_clf < best_metrics['best_clf']:
+            best_metrics['best_clf'] = avg_loss_clf
+            is_best = True
+        if avg_loss_reg < best_metrics['best_reg']:
+            best_metrics['best_reg'] = avg_loss_reg
+            is_best = True
+        if avg_loss_reg_full < best_metrics['best_reg_full']:
+            best_metrics['best_reg_full'] = avg_loss_reg_full
+            is_best = True
+    
     return {
-        'loss_clf': total_loss_cat / num_batches,
-        'loss_reg': total_loss_reg / num_batches,
-        'loss_reg_full': total_loss_reg_full / num_batches,
+        'loss_clf': avg_loss_clf,
+        'loss_reg': avg_loss_reg,
+        'loss_reg_full': avg_loss_reg_full,
+        'is_best': is_best
     }
 
 
-
 def main():
-    
-
     # Settings
     pretrained_model = "GSAI-ML/LLaDA-8B-Instruct"
     lr = 1e-5
@@ -208,8 +271,16 @@ def main():
         "n_epochs": epochs,
         "n_steps": 1000,
         "val_check_steps": 100,
+        "checkpoint_dir": "./checkpoints",  # Directory to save checkpoints
+        "checkpoint_steps": 200,           # Save checkpoint every N steps
+        "resume_from_checkpoint": None,    # Path to checkpoint to resume from, or None
+        "run_name": None,                  # Name for wandb run
     }
 
+    config = get_config()
+    # Create checkpoint directory
+    os.makedirs(config["checkpoint_dir"], exist_ok=True)
+    
     init_wandb(config)
     
     # Tokenizer
@@ -223,6 +294,31 @@ def main():
     optimizer_clf = AdamW(model.classifier.parameters(), lr=lr)
     optimizer_reg = AdamW(model.regressor.parameters(), lr=lr)
     optimizer_reg_full = AdamW(model.full_regressor.parameters(), lr=lr)
+    
+    # Store optimizers in a dictionary for easier checkpointing
+    optimizers = {
+        'clf': optimizer_clf,
+        'reg': optimizer_reg,
+        'reg_full': optimizer_reg_full
+    }
+
+    # Initialize best metrics and start epoch/step
+    best_metrics = {
+        'best_clf': float('inf'),
+        'best_reg': float('inf'),
+        'best_reg_full': float('inf')
+    }
+    start_epoch = 1
+    global_step = 0
+
+    # Resume from checkpoint if specified
+    if config["resume_from_checkpoint"]:
+        checkpoint = load_checkpoint(model, optimizers, config["resume_from_checkpoint"])
+        if checkpoint:
+            start_epoch = checkpoint['epoch'] + 1
+            global_step = checkpoint['step']
+            best_metrics = checkpoint['best_metrics']
+            print(f"Resuming from epoch {start_epoch}, step {global_step}")
 
     stopper_clf = EarlyStopper(patience=3, mode='min', min_delta=0.001)
     stopper_reg = EarlyStopper(patience=3, mode='min', min_delta=0.001)
@@ -231,9 +327,9 @@ def main():
     stop_clf = stop_reg = stop_reg_full = False
 
     # Training loop
-    for epoch in range(1, epochs + 1):
-    
+    for epoch in range(start_epoch, epochs + 1):
         val_check_steps = config.get("val_check_steps", 100)
+        checkpoint_steps = config.get("checkpoint_steps", 200)
 
         train_loader = datamodule.train_dataloader()
         val_loader = datamodule.val_dataloader()
@@ -249,10 +345,26 @@ def main():
 
         train_pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} [Train]")
         for idx, batch in train_pbar:
-            current_step = (idx + 1) * train_loader.batch_size
-
-            if current_step % val_check_steps == 0:
-                val_metrics = eval_epoch(model, val_loader, device)
+            global_step += 1
+            
+            # Validation checkpoint
+            if global_step % val_check_steps == 0:
+                val_metrics = eval_epoch(model, val_loader, device, best_metrics)
+                
+                # Save checkpoint if this is the best model so far
+                if val_metrics['is_best']:
+                    print("New best model found!")
+                    save_checkpoint(
+                        model, 
+                        optimizers,
+                        epoch,
+                        global_step,
+                        {'best_clf': best_metrics['best_clf'], 
+                         'best_reg': best_metrics['best_reg'], 
+                         'best_reg_full': best_metrics['best_reg_full'],
+                         'is_best': True},
+                        config["checkpoint_dir"]
+                    )
                 
                 # Update early stopping flags
                 if not stop_clf:
@@ -261,13 +373,27 @@ def main():
                     stop_reg = stopper_reg.should_stop(val_metrics['loss_reg'])
                 if not stop_reg_full:
                     stop_reg_full = stopper_reg_full.should_stop(val_metrics['loss_reg_full'])
+                
                 # Log validation metrics in tqdm
                 train_pbar.set_postfix({
                     'val/loss_clf': f"{val_metrics['loss_clf']:.4f}",
                     'val/loss_reg': f"{val_metrics['loss_reg']:.4f}",
                     'val/loss_reg_full': f"{val_metrics['loss_reg_full']:.4f}"
                 })
-
+            
+            # Regular checkpoint
+            if global_step % checkpoint_steps == 0:
+                save_checkpoint(
+                    model, 
+                    optimizers,
+                    epoch,
+                    global_step,
+                    {'best_clf': best_metrics['best_clf'], 
+                     'best_reg': best_metrics['best_reg'], 
+                     'best_reg_full': best_metrics['best_reg_full'],
+                     'is_best': False},
+                    config["checkpoint_dir"]
+                )
 
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
@@ -288,11 +414,10 @@ def main():
                 loss_clf.backward()
                 optimizer_clf.step()
                 total_loss_cat += loss_clf.item()
-                wandb.log(
-                    {
-                        "train/loss_clf": loss_clf.item(),
-                    }
-                )
+                wandb.log({
+                    "train/loss_clf": loss_clf.item(),
+                    "step": global_step
+                })
                 
 
             if not stop_reg:
@@ -303,11 +428,10 @@ def main():
                 loss_reg.backward()
                 optimizer_reg.step()
                 total_loss_reg += loss_reg.item()
-                wandb.log(
-                    {
-                        "train/loss_reg": loss_reg.item(),
-                    }
-                )
+                wandb.log({
+                    "train/loss_reg": loss_reg.item(),
+                    "step": global_step
+                })
 
             if not stop_reg_full:
                 # Full regression head update
@@ -317,13 +441,11 @@ def main():
                 loss_reg_full.backward()
                 optimizer_reg_full.step()
                 total_loss_reg_full += loss_reg_full.item()
-                wandb.log(
-                    {
-                        "train/loss_reg_full": loss_reg_full.item(),
-                    }
-                )
+                wandb.log({
+                    "train/loss_reg_full": loss_reg_full.item(),
+                    "step": global_step
+                })
             
-
             # Log training metrics in tqdm
             train_pbar.set_postfix({
                 'train/loss_clf': f"{total_loss_cat / (num_batches + 1):.4f}",
@@ -333,9 +455,38 @@ def main():
 
             if stop_clf and stop_reg and stop_reg_full:
                 print("Early stopping triggered.")
+                # Save final checkpoint before stopping
+                save_checkpoint(
+                    model, 
+                    optimizers,
+                    epoch,
+                    global_step,
+                    {'best_clf': best_metrics['best_clf'], 
+                     'best_reg': best_metrics['best_reg'], 
+                     'best_reg_full': best_metrics['best_reg_full'],
+                     'is_best': False},
+                    config["checkpoint_dir"]
+                )
                 break
 
             num_batches += 1
+        
+        # Save checkpoint at the end of each epoch
+        save_checkpoint(
+            model, 
+            optimizers,
+            epoch,
+            global_step,
+            {'best_clf': best_metrics['best_clf'], 
+             'best_reg': best_metrics['best_reg'], 
+             'best_reg_full': best_metrics['best_reg_full'],
+             'is_best': False},
+            config["checkpoint_dir"]
+        )
+        
+        if stop_clf and stop_reg and stop_reg_full:
+            print("Early stopping triggered. Training complete.")
+            break
 
 
 if __name__ == "__main__":

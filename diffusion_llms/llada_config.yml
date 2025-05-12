@@ -1,0 +1,35 @@
+# Model configuration
+model:
+  pretrained_model_name: "GSAI-ML/LLaDA-8B-Instruct"
+  context_length: 4096
+
+# Training parameters
+training:
+  batch_size: 4
+  learning_rate: 1e-5
+  epochs: 1
+  accumulate_grad: 1
+  max_steps: 5000
+  seed: 42
+
+# Validation parameters
+validation:
+  val_test_perc: 0.05
+  val_check_steps: 100
+
+# Checkpoint parameters
+checkpoint:
+  dir: "./checkpoints"
+  steps: 200
+  resume_from: null  # Set to path to resume from checkpoint
+
+# Early stopping parameters
+early_stopping:
+  patience: 3
+  min_delta: 0.001
+
+# Logging and monitoring
+logging:
+  run_name: "variable-length-llada"
+  project_name: "diffusion-llms"
+  log_dir: "./logs"
