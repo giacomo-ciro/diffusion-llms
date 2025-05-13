@@ -102,7 +102,7 @@ for group in ["random", "trigger"]:
     arr = np.load(f"{group}_probs.npy")
     
     # Compute mean along the N dimension
-    avg = np.mean(axis = 0)
+    avg = np.mean(arr, axis = 0)
     assert len(avg) == seq_len
 
     # path to save
