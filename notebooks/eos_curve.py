@@ -23,6 +23,7 @@ device = 'mps'  # or 'cuda' for GPU, 'cpu' for CPU
 
 TRIGGER_WORDS = ["explain", "tell me"]
 N = 10
+seq_len = 1024
 mask_id = 126336
 
 print("Loading data...")
@@ -46,10 +47,10 @@ print("Loading model...")
 model = LladaBackbone()
 
 # Save
-logits_buffer = []
+probs_buffer = []
 
 # Loop through and save distributions
-print("Forwarding prompts")
+print("Forwarding prompts...")
 for group in ["random", "trigger"]:
     for prompt in tqdm(prompts[group].values(), desc=f"{group} prompts"):
 
@@ -57,7 +58,7 @@ for group in ["random", "trigger"]:
         prompt = model.tokenizer(prompt, return_tensors="pt").input_ids
 
         # Create input with mask
-        x = torch.full((1, 1024), mask_id, dtype=torch.long).to(
+        x = torch.full((1, seq_len), mask_id, dtype=torch.long).to(
             model.device
         )
 
@@ -70,36 +71,50 @@ for group in ["random", "trigger"]:
         # Get logits corresponding to EOS
         logits = logits[:, :, model.tokenizer.eos_token_id].squeeze(0)  # (1024)
 
+        # Save probs
+        probs = torch.nn.functional.softmax(logits.to(torch.float64), dim=-1)
+        
+        # Convert to numpy
+        probs = probs.detach().cpu().numpy().tolist()
+
         # Store
-        logits_buffer.append(logits)
+        probs_buffer.append(probs)
 
     # Save the result
+    arr = np.array(probs_buffer)
+    assert arr.shape == (N, seq_len)
     np.save(
-        f"{group}_logits.npy",
-        np.array(logits),
+        f"{group}_probs.npy",
+        arr,
     )
 
-print("Succesffully saved all logits!")
+print("Succesffully saved all probs!")
 
 # Test
-print(f"Loading logits back...")
+print("Loading logits back to plot...")
 for group in ["random", "trigger"]:
+    
+    # Load back the probs
     arr = np.load(f"{group}_logits.npy")
-print("Successfully loaded back all logits!")
+    
+    # Compute mean along the N dimension
+    avg = np.mean(dim = 0)
+    assert len(avg) == seq_len
 
-print("Done")
-#     p = torch.nn.functional.softmax(logits.to(torch.float64), dim=-1)
+    # path to save
+    path = f"{group}_eos.png"
+    # plot the distribution of eos probabilities per position
+    plt.figure(figsize=(20, 10))
+    sns.set(style="whitegrid")
+    sns.set_palette("pastel")
+    plt.title(f"EOS Probability per Position ({group.capitalize()} Prompts)")
+    plt.xlabel("Position")
+    plt.ylabel("Probability")
+    plt.xticks(np.arange(0, 1024, step=50))
+    plt.yticks(np.arange(0, np.max(avg) + np.std(avg), step=0.1))
+    plt.xlim(0, 1024)
+    plt.ylim(0, 1)
+    plt.plot(arr, color='blue', label='Eos probabilities')
+    print(f"Successfully saved plot saved to {path}")
 
-# # plot the distribution of eos probabilities per position
-# p = p.cpu().numpy()
-# plt.figure(figsize=(20, 10))
-# sns.set(style="whitegrid")
-# sns.set_palette("pastel")
-# plt.title("Eos probabilities per position")
-# plt.xlabel("Position")
-# plt.ylabel("Probability")
-# plt.xticks(np.arange(0, 1024, step=50))
-# plt.yticks(np.arange(0, np.max(p) + np.std(p), step=0.1))
-# plt.xlim(0, 1024)
-# plt.ylim(0, 1)
-# plt.plot(p, color='blue', label='Eos probabilities')
+print("Done!")
