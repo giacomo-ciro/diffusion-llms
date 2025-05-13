@@ -19,11 +19,9 @@ def step_zero(model, masked_prompt, eos_token_id=2, percentile=0.9):
     # Get eos token id from model config if available, else use a default (e.g., 2 or 50256)
     eos_token_id = getattr(model.config, 'eos_token_id', eos_token_id)
     
-    print(logits)
     # Get probabilities for the eos token at each position
     eos_logits = logits[..., eos_token_id]  # shape: (batch, seq_len)
 
-    print(eos_logits)
 
     # Calculate the threshold for the eos token probabilities
     threshold = torch.quantile(eos_logits.to(torch.float32), percentile, dim=-1, keepdim=True)
@@ -72,55 +70,118 @@ def get_num_transfer_tokens(mask_index, steps):
     return num_transfer_tokens
 
 
+###############################################################################
+# 1.  STEP‑ZERO GENERATION THAT REALLY STOPS AT THE PREDICTED END #############
+###############################################################################
 @torch.no_grad()
-def generate_step_zero_based(model, prompt, gen_length=128, temperature=0., cfg_scale=0.,
-                              remasking='low_confidence', mask_id=126336, percentile=0.9, eos_token_id=2):
+def generate_step_zero_based(
+        model,
+        prompt,
+        max_len: int = 1024,         # <= max length of the prompt
+        steps: int = 128,               # <= how many reverse‑diffusion steps you want
+        temperature: float = 0.,
+        cfg_scale: float = 0.,
+        remasking: str = 'low_confidence',
+        mask_id: int = 126336,
+        percentile: float = .9,
+        eos_token_id: int = 2,
+):
     """
-    Generate using step-zero estimate to run the entire process in one-shot.
+    “One‑shot” generation that
+
+    1.  uses step‑zero to predict where the first <eos> will appear;
+    2.  allocates just enough room for that many tokens (no giant `max_len`);
+    3.  runs *exactly* `steps` reverse‑diffusion iterations, spreading the
+        masked‑>token transfers evenly across those iterations;
+    4.  exits early if the sequence is already fully resolved.
+
+    The logic is identical to the block version, but without the block loop.
     """
-    # Prepare input tensor
-    x = torch.full((1, prompt.shape[1] + gen_length), mask_id, dtype=torch.long).to(model.device)
-    x[:, :prompt.shape[1]] = prompt.clone()
+
+    assert prompt.shape[0] == 1, "Only batch size of 1 is supported for step-zero generation"
+    assert steps <= max_len, "Steps must be less than or equal to max_len" 
+    #check prompt is shorter than max_len
+    assert steps <= prompt.shape[1], "Steps must be less than or equal to the length of the prompt"
+
+    device = model.device
+    prompt_len = prompt.shape[1]
+
+    # ────────────────────────────────────
+    # 1.  Predict how long the answer will be
+    # ────────────────────────────────────
+    probe = torch.full((1, max_len), mask_id, dtype=torch.long, device=device)
+    probe[:, :prompt_len] = prompt
+    first_eos_pos = step_zero(model, probe, eos_token_id=eos_token_id,
+                              percentile=percentile).item()
+
+    # +1 so that the position itself is included
+    pred_seq_len = max(first_eos_pos + 1, prompt_len + 1)
+
+    # ────────────────────────────────────
+    # 2.  Allocate the generation tensor
+    # ────────────────────────────────────
+    x = torch.full((1, pred_seq_len), mask_id, dtype=torch.long, device=device)
+    x[:, :prompt_len] = prompt
     prompt_index = (x != mask_id)
 
-    # Step zero to determine how many steps to run
-    first_eos_pos = step_zero(model, x, eos_token_id=eos_token_id, percentile=percentile)
-    steps = torch.clamp(first_eos_pos, min=1).item()
+    # ────────────────────────────────────
+    # 3.  Pre‑compute how many tokens to
+    #     un‑mask at *each* step so that
+    #     we finish exactly on step `steps`
+    # ────────────────────────────────────
+    mask_index_init = (x == mask_id)
+    num_transfer_tokens = get_num_transfer_tokens(mask_index_init, steps)  # (1, steps)
 
+    # ────────────────────────────────────
+    # 4.  Reverse diffusion
+    # ────────────────────────────────────
     for i in range(steps):
-        mask_index = (x == mask_id)
+
+        # All tokens resolved?  →  break early
+        if not (x == mask_id).any():
+            break
+
+        # ── forward pass ─────────────────
         if cfg_scale > 0.:
             un_x = x.clone()
             un_x[prompt_index] = mask_id
-            x_ = torch.cat([x, un_x], dim=0)
-            logits = model(x_).logits
-            logits, un_logits = torch.chunk(logits, 2, dim=0)
+            logits_full = model(torch.cat([x, un_x], dim=0)).logits
+            logits, un_logits = torch.chunk(logits_full, 2, dim=0)
             logits = un_logits + (cfg_scale + 1) * (logits - un_logits)
         else:
-            logits = model(x).logits
+            logits = model(x).logits                                  # (1, L, V)
 
-        logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
-        x0 = torch.argmax(logits_with_noise, dim=-1)
+        # ── sample candidate tokens ──────
+        logits = add_gumbel_noise(logits, temperature)
+        x0 = logits.argmax(dim=-1)                                    # (1, L)
 
         if remasking == 'low_confidence':
-            p = F.softmax(logits.to(torch.float32), dim=-1)
-            x0_p = torch.gather(p, dim=-1, index=x0.unsqueeze(-1)).squeeze(-1)
+            probs = F.softmax(logits.float(), dim=-1)
+            x0_p = probs.gather(-1, x0.unsqueeze(-1)).squeeze(-1)     # (1, L)
         elif remasking == 'random':
-            x0_p = torch.rand((x0.shape[0], x0.shape[1]), device=x0.device)
+            x0_p = torch.rand_like(x0.float())
         else:
             raise NotImplementedError(remasking)
 
-        x0 = torch.where(mask_index, x0, x)
-        confidence = torch.where(mask_index, x0_p, -np.inf)
+        # keep already‑fixed tokens untouched
+        mask_index = (x == mask_id)
+        confidence = torch.where(mask_index, x0_p, torch.tensor(-float("inf"),
+                                                                device=device))
 
-        transfer_index = torch.zeros_like(x0, dtype=torch.bool, device=x0.device)
-        for j in range(confidence.shape[0]):
-            k = (mask_index[j].sum() // steps) + 1
-            _, select_index = torch.topk(confidence[j], k=min(k, confidence.shape[1]))
-            transfer_index[j, select_index] = True
+        # ── pick *exactly* k new tokens for this step ─────
+        transfer_index = torch.zeros_like(mask_index, dtype=torch.bool)
+        for b in range(confidence.shape[0]):
+            k = int(num_transfer_tokens[b, i].item())
+            k = min(k, mask_index[b].sum().item())   # safety
+            if k > 0:
+                _, topk = torch.topk(confidence[b], k=k)
+                transfer_index[b, topk] = True
+
+        # write them into x
         x[transfer_index] = x0[transfer_index]
 
     return x
+
 
 @ torch.no_grad()
 def generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
