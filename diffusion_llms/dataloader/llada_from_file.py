@@ -54,13 +54,13 @@ class EmbeddedDataset(Dataset):
             
             # Load data from the correct batch
             last_hidden = torch.tensor(f[f'embeddings/batch_{batch_idx}/last_hidden'][local_idx])
-            pooled = torch.tensor(f[f'embeddings/batch_{batch_idx}/pooled'][local_idx])
             eos_labels = torch.tensor(f[f'labels/batch_{batch_idx}/eos_labels'][local_idx])
             true_length = torch.tensor(f[f'labels/batch_{batch_idx}/true_lengths'][local_idx])
             
             # Create attention mask (all ones since we're using precomputed embeddings)
             attention_mask = torch.ones(last_hidden.shape[0], dtype=torch.long)
-        
+
+            pooled = torch.mean(last_hidden, dim=0)  # [hidden_dim]
         return {
             "last_hidden": last_hidden,          # [seq_len, hidden_dim]
             "pooled": pooled,                    # [hidden_dim]
