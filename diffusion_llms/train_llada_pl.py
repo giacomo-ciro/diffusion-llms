@@ -285,7 +285,7 @@ def main():
     )
     
     # Train model
-    trainer.fit(model, data_module, ckpt_path=args["resume"])
+    trainer.fit(model, data_module, ckpt_path=args.get("resume", None))
     
     # Save final model
     trainer.save_checkpoint(os.path.join(args["output_dir"], f'final_{args["model_type"]}_model.ckpt'))
