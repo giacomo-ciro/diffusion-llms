@@ -143,7 +143,6 @@ def generate_step_zero_based(
     probe[:, :prompt_len] = prompt
     first_eos_pos = step_zero(model, probe, eos_token_id=eos_token_id,
                               percentile=percentile).item()
-    print(first_eos_pos)
 
     # +1 so that the position itself is included
     pred_seq_len = max(first_eos_pos + 1, prompt_len + 1)
@@ -194,8 +193,7 @@ def generate_step_zero_based(
         else:
             raise NotImplementedError(remasking)
 
-        # keep already‑fixed tokens untouched
-        mask_index = (x == mask_id)
+        # keep already‑fixed tokens untouched mask_index = (x == mask_id)
         confidence = torch.where(mask_index, x0_p, torch.tensor(-float("inf"),
                                                                 device=device))
 
