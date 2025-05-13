@@ -5,32 +5,62 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModel
 import time
 
-def step_zero(model, masked_prompt, eos_token_id=126081, percentile=0.1):
+@torch.no_grad()
+def step_zero(
+    model,
+    masked_prompt: torch.Tensor,
+    *,
+    mask_id: int = 126336,       # the id you use for [MASK]
+    eos_token_id: int = 2,       # model‑specific <eos>
+    percentile: float = 0.90,    # e.g. 0.90 → top‑10 % highest probs
+    use_probs: bool = True       # set False if you really want raw logits
+) -> torch.LongTensor:
     """
-    Initializes the generation process by using the model and the masked prompt to compute
-    the expected length of the sentence at the first step.
+    Predict the first position in *each* sequence where the model already thinks
+    an <eos> is highly likely.
 
-    Returns:
-        The position (index) where the eos probability first meets or exceeds the threshold for each batch element.
+    The percentile is computed **only over currently‑masked positions** so the
+    prompt tokens cannot pollute the statistic.
+
+    Returns
+    -------
+    first_pos : LongTensor  shape (batch,)
+        One index per batch element.  If no position reaches the threshold the
+        function returns the *first* still‑masked position so generation will
+        at least start there instead of at 0.
     """
-    # Generate logits for the masked prompt
-    logits = model(masked_prompt).logits  # shape: (batch, seq_len, vocab_size)
+    logits = model(masked_prompt).logits              # (B, L, V)
+    eos_token_id = getattr(model.config, "eos_token_id", eos_token_id)
 
-    # Get eos token id from model config if available, else use a default (e.g., 2 or 50256)
-    eos_token_id = getattr(model.config, 'eos_token_id', eos_token_id)
-    
-    # Get probabilities for the eos token at each position
-    eos_logits = logits[..., eos_token_id]  # shape: (batch, seq_len)
+    # (B, L) log‑probabilities (or logits) of generating <eos>
+    if use_probs:
+        eos_scores = torch.softmax(logits.float(), dim=-1)[..., eos_token_id]
+    else:
+        eos_scores = logits[..., eos_token_id].float()
 
+    batch_size, seq_len = eos_scores.shape
+    first_pos = torch.zeros(batch_size, dtype=torch.long, device=masked_prompt.device)
 
-    # Calculate the threshold for the eos token probabilities
-    threshold = torch.quantile(eos_logits.to(torch.float32), percentile, dim=-1, keepdim=True)
+    for b in range(batch_size):
+        mask_positions = (masked_prompt[b] == mask_id)           # which tokens are still masked?
+        if not mask_positions.any():
+            # nothing left to predict → return last token
+            first_pos[b] = seq_len - 1
+            continue
 
-    # Find the first position where eos_logits >= threshold for each batch
-    meets_threshold = eos_logits >= threshold  # shape: (batch, seq_len)
-    # Use argmax on the boolean mask; if never met, returns 0
-    
-    first_pos = meets_threshold.float().cumsum(dim=-1).eq(1).float().argmax(dim=-1)
+        masked_scores = eos_scores[b][mask_positions]
+
+        # score threshold for this sample
+        thresh = torch.quantile(masked_scores, percentile)
+
+        # positions where eos_score ≥ threshold **and** token is masked
+        good = mask_positions & (eos_scores[b] >= thresh)
+
+        if good.any():
+            first_pos[b] = torch.nonzero(good, as_tuple=False)[0, 0]
+        else:
+            # if nothing meets the percentile, start at first masked position
+            first_pos[b] = torch.nonzero(mask_positions, as_tuple=False)[0, 0]
 
     return first_pos
 
