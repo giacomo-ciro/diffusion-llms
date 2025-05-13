@@ -23,7 +23,7 @@ def step_zero(model, masked_prompt, eos_token_id=2, percentile=0.9):
     eos_logits = logits[..., eos_token_id]  # shape: (batch, seq_len)
 
     # Calculate the threshold for the eos token probabilities
-    threshold = torch.quantile(eos_logits, percentile, dsim=-1, keepdim=True)  # shape: (batch, 1)
+    threshold = torch.quantile(eos_logits, percentile, dim=-1, keepdim=True)
 
     # Find the first position where eos_logits >= threshold for each batch
     meets_threshold = eos_logits >= threshold  # shape: (batch, seq_len)
