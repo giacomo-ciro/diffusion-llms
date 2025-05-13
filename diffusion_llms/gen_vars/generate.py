@@ -41,12 +41,12 @@ def add_gumbel_noise(logits, temperature):
     '''
     The Gumbel max is a method for sampling categorical distributions.
     According to arXiv:2409.02908, for MDM, low-precision Gumbel Max improves perplexity score but reduces generation quality.
-    Thus, we use float64.
+    Thus, we use float32.
     '''
     if temperature == 0:
         return logits
-    logits = logits.to(torch.float64)
-    noise = torch.rand_like(logits, dtype=torch.float64)
+    logits = logits.to(torch.float32)
+    noise = torch.rand_like(logits, dtype=torch.float32)
     gumbel_noise = (- torch.log(noise)) ** temperature
     return logits.exp() / gumbel_noise
 
@@ -103,7 +103,7 @@ def generate_step_zero_based(model, prompt, gen_length=128, temperature=0., cfg_
         x0 = torch.argmax(logits_with_noise, dim=-1)
 
         if remasking == 'low_confidence':
-            p = F.softmax(logits.to(torch.float64), dim=-1)
+            p = F.softmax(logits.to(torch.float32), dim=-1)
             x0_p = torch.gather(p, dim=-1, index=x0.unsqueeze(-1)).squeeze(-1)
         elif remasking == 'random':
             x0_p = torch.rand((x0.shape[0], x0.shape[1]), device=x0.device)
@@ -174,7 +174,7 @@ def generate(model, prompt, steps=128, gen_length=128, block_length=128, tempera
             x0 = torch.argmax(logits_with_noise, dim=-1) # b, l
 
             if remasking == 'low_confidence':
-                p = F.softmax(logits.to(torch.float64), dim=-1)
+                p = F.softmax(logits.to(torch.float32), dim=-1)
                 x0_p = torch.squeeze(
                     torch.gather(p, dim=-1, index=torch.unsqueeze(x0, -1)), -1) # b, l
             elif remasking == 'random':
