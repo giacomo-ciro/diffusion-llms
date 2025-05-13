@@ -38,8 +38,8 @@ data['is_trigger'] = data.user_prompt.str.contains(pattern, case=False, regex=Tr
 
 # Sample N random & N trigger words
 prompts = {}
-prompts["random"] = data[data.is_trigger].sample(N).to_list()
-prompts["trigger"] = data[~data.is_trigger].sample(N).to_list()
+prompts["random"] = data[data.is_trigger].sample(N).user_prompt.to_list()
+prompts["trigger"] = data[~data.is_trigger].sample(N).user_prompt.to_list()
 
 
 print("Loading model...")
@@ -65,11 +65,16 @@ for group in ["random", "trigger"]:
         # Add prompt 
         x[:, : prompt.shape[1]] = prompt.clone()
 
+        # Needed for forward
+        dummy_target = torch.zeros_like(x)
+
         # Forward
-        logits = model(x)
+        out = model(x, target=dummy_target)
+        logits = out['logits']
 
         # Get logits corresponding to EOS
-        logits = logits[:, :, model.tokenizer.eos_token_id].squeeze(0)  # (1024)
+        # (logits, )
+        logits = logits[:, :, model.tokenizer.eos_token_id].squeeze(0) 
 
         # Save probs
         probs = torch.nn.functional.softmax(logits.to(torch.float64), dim=-1)
