@@ -275,7 +275,7 @@ def main():
     
     # Create trainer
     trainer = pl.Trainer(
-        max_epochs=args["max_epochs"],
+        max_epochs=1,
         accelerator='auto',  # Automatically use GPU if available
         devices=1,
         logger=logger,
