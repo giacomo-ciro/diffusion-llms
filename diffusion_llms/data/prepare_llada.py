@@ -2,6 +2,7 @@
 """
 Script to precompute and store LLaDA embeddings from train, validation, and test datasets
 for more efficient training of classification and regression heads later.
+Saves embeddings in separate files every N batches, supports resume and reproducible seeds.
 """
 
 import os
@@ -9,188 +10,159 @@ import argparse
 import torch
 import h5py
 import json
+import glob
+import re
+import random
+import numpy as np
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
 # Import your dataset module
-# Change this import to match your actual project structure
 from diffusion_llms.dataloader.llada_2 import DataModule
 from diffusion_llms.input_helper import get_config
 
 
-def extract_embeddings(model, dataloader, device, batch_size, context_length, 
-                      output_file, checkpoint_every=100, resume_from=None):
+def extract_embeddings(
+    model, dataloader, device,
+    output_dir, split_name,
+    save_every=50,
+    resume=False,
+    max_batches=None
+):
     """
-    Extract and return embeddings from the LLaDA model for a given dataset.
-    Saves checkpoints every 'checkpoint_every' steps to allow resuming.
+    Extract embeddings and save in separate HDF5 files every `save_every` batches.
+    Supports resume by skipping already-created file parts.
+    Stops early if `max_batches` is reached.
     """
-    all_last_hidden = []
-    all_pooled = []
-    all_eos_labels = []
-    all_true_lengths = []
+    # Determine which parts already exist
+    resume_parts = set()
+    if resume:
+        pattern = os.path.join(output_dir, f"{split_name}_embeddings_part*.h5")
+        for path in glob.glob(pattern):
+            m = re.search(rf"{split_name}_embeddings_part(\d+)\.h5$", path)
+            if m:
+                resume_parts.add(int(m.group(1)))
     
-    # If resuming, load checkpoint info
-    start_batch = 0
-    if resume_from and os.path.exists(resume_from):
-        with open(resume_from, 'r') as f:
-            checkpoint_info = json.load(f)
-        start_batch = checkpoint_info.get('completed_batches', 0)
-        print(f"Resuming from batch {start_batch}")
-    
-    # Create/open the output file
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    mode = 'a' if resume_from and os.path.exists(output_file) else 'w'
-    
-    with h5py.File(output_file, mode) as h5f:
-        # Initialize groups if creating new file
-        if mode == 'w':
+    total_batches = len(dataloader)
+    file_idx = -1
+    h5f = None
+    embeddings_group = None
+    labels_group = None
+
+    for batch_idx, batch in enumerate(tqdm(dataloader, total=total_batches, desc=f"Processing {split_name}")):
+        # Stop if reached max_batches
+        if max_batches is not None and batch_idx >= max_batches:
+            break
+
+        part_idx = batch_idx // save_every
+        # Skip entire part if resuming
+        if resume and part_idx in resume_parts:
+            continue
+
+        # On new part, open new file
+        if part_idx != file_idx:
+            if h5f:
+                h5f.close()
+            chunk_name = f"{split_name}_embeddings_part{part_idx}.h5"
+            chunk_path = os.path.join(output_dir, chunk_name)
+            os.makedirs(os.path.dirname(chunk_path), exist_ok=True)
+            h5f = h5py.File(chunk_path, 'w')
             embeddings_group = h5f.create_group('embeddings')
             labels_group = h5f.create_group('labels')
-        else:
-            embeddings_group = h5f['embeddings']
-            labels_group = h5f['labels']
-        
-        # Process batches
-        total_batches = len(dataloader)
-        pbar = tqdm(enumerate(dataloader), total=total_batches, 
-                   desc="Processing batches", initial=start_batch)
-        
-        # Skip already processed batches if resuming
-        for batch_idx, batch in pbar:
-            if batch_idx < start_batch:
-                continue
-                
-            # Move batch to device
-            input_ids = batch["input_ids"].to(device)
-            eos_labels = batch["eos_labels"]
-            true_length = batch["true_length"]
-            
-            # Forward pass - with no grad for efficiency
-            with torch.no_grad():
-                # Enable output_hidden_states to get all hidden states
-                outputs = model(
-                    input_ids=input_ids,
-                    return_dict=True,
-                    output_hidden_states=True
-                )
-                
-                # Get the last hidden state (last layer's output)
-                last_hidden = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_dim]
-                
+            file_idx = part_idx
 
-            
-            # Save directly to HDF5 to avoid memory issues
-            batch_group = embeddings_group.create_group(f'batch_{batch_idx}')
-            batch_group.create_dataset('last_hidden', data=last_hidden.cpu().numpy(), compression='gzip')
-            
-            labels_batch_group = labels_group.create_group(f'batch_{batch_idx}')
-            labels_batch_group.create_dataset('eos_labels', data=eos_labels.numpy(), compression='gzip')
-            labels_batch_group.create_dataset('true_lengths', data=true_length.numpy(), compression='gzip')
-            
-            # Save checkpoint every N batches
-            if (batch_idx + 1) % checkpoint_every == 0 or batch_idx == total_batches - 1:
-                # Create checkpoint file
-                checkpoint_path = os.path.join(os.path.dirname(output_file), 
-                                              f"{os.path.basename(output_file)}.checkpoint.json")
-                checkpoint_info = {
-                    'completed_batches': batch_idx + 1,
-                    'total_batches': total_batches,
-                    'output_file': output_file
-                }
-                with open(checkpoint_path, 'w') as f:
-                    json.dump(checkpoint_info, f)
-                
-                pbar.set_description(f"Saved checkpoint at batch {batch_idx+1}/{total_batches}")
-    
-    # Return the checkpoint info path for potential future use
-    return os.path.join(os.path.dirname(output_file), f"{os.path.basename(output_file)}.checkpoint.json")
+        # Move batch to device
+        input_ids = batch["input_ids"].to(device)
+        eos_labels = batch["eos_labels"]
+        true_length = batch["true_length"]
+
+        # Forward pass without gradients
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                return_dict=True,
+                output_hidden_states=True
+            )
+            last_hidden = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_dim]
+
+        # Save embeddings
+        grp = embeddings_group.create_group(f'batch_{batch_idx}')
+        grp.create_dataset('last_hidden', data=last_hidden.cpu().numpy(), compression='gzip')
+
+        # Save labels
+        lbl_grp = labels_group.create_group(f'batch_{batch_idx}')
+        lbl_grp.create_dataset('eos_labels', data=eos_labels.numpy(), compression='gzip')
+        lbl_grp.create_dataset('true_lengths', data=true_length.numpy(), compression='gzip')
+
+    # Close any open file
+    if h5f:
+        h5f.close()
 
 
 def main():
-    # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Prepare embedded dataset for LLaDA training')
-    parser.add_argument('--output_dir', type=str, default='embedded_datasets', help='Directory to save embedded datasets')
-    parser.add_argument('--model_name', type=str, default='GSAI-ML/LLaDA-8B-Instruct', help='Pretrained model name')
+    parser.add_argument('--output_dir', type=str, default='embedded_datasets_new',
+                        help='Directory to save embedded datasets')
+    parser.add_argument('--model_name', type=str, default='GSAI-ML/LLaDA-8B-Instruct',
+                        help='Pretrained model name')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size for processing')
     parser.add_argument('--device', type=str, default='cuda', help='Device to use (cuda or cpu)')
-    parser.add_argument('--checkpoint_every', type=int, default=100, help='Save checkpoint every N batches')
-    parser.add_argument('--resume', action='store_true', help='Resume from checkpoint if available')
+    parser.add_argument('--save_every', type=int, default=50,
+                        help='Number of batches per output file')
+    parser.add_argument('--resume', action='store_true',
+                        help='Resume from existing part files')
+    parser.add_argument('--max_batches', type=int, default=100,
+                        help='Stop after processing this many batches')
+    parser.add_argument('--seed', type=int, default=42,
+                        help='Random seed for reproducibility')
     args = parser.parse_args()
-    
-    # Create output directory if it doesn't exist
+
+    # Set seeds for reproducibility
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    # Ensure deterministic behavior
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    # Prepare
     os.makedirs(args.output_dir, exist_ok=True)
-    
-    # Load configuration
     config = get_config()
-    
-    # Update batch size if provided
-    if args.batch_size:
-        config["batch_size"] = args.batch_size
-    
-    # Use GPU if available
+    config['batch_size'] = args.batch_size
+
     device = torch.device(args.device if torch.cuda.is_available() and args.device == 'cuda' else 'cpu')
     print(f"Using device: {device}")
-    
-    # Load model and tokenizer
+
     print(f"Loading model: {args.model_name}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     model = AutoModel.from_pretrained(args.model_name, trust_remote_code=True)
-    model.eval()  # Set to evaluation mode
+    model.eval()
     model.to(device)
-    
-    # Load data
+
     print("Initializing data module")
     datamodule = DataModule(config, tokenizer)
     datamodule.setup()
-    
-    # Process each split
+
     splits = {
-        #'train': datamodule.train_dataloader(),
+        'train': datamodule.train_dataloader(),
         'val': datamodule.val_dataloader(),
         'test': datamodule.test_dataloader()
     }
-    
-    # Process and save each dataset
+
     for split_name, dataloader in splits.items():
-        output_file = os.path.join(args.output_dir, f'{split_name}_embeddings.h5')
-        checkpoint_file = os.path.join(args.output_dir, f"{split_name}_embeddings.h5.checkpoint.json")
-        
-        # Check if we can resume
-        resume_from = None
-        if args.resume and os.path.exists(checkpoint_file):
-            with open(checkpoint_file, 'r') as f:
-                checkpoint_info = json.load(f)
-            
-            # Only resume if the file is incomplete
-            if checkpoint_info.get('completed_batches', 0) < checkpoint_info.get('total_batches', 0):
-                resume_from = checkpoint_file
-                print(f"Found checkpoint for {split_name}, resuming...")
-            else:
-                print(f"Found completed checkpoint for {split_name}, skipping...")
-                continue
-        elif os.path.exists(output_file) and not args.resume:
-            print(f"Output file for {split_name} already exists. Use --resume to continue from checkpoint.")
-            continue
-            
-        print(f"Processing {split_name} dataset")
-        
-        # Extract embeddings with checkpointing
+        print(f"Processing split: {split_name}")
         extract_embeddings(
-            model=model, 
-            dataloader=dataloader, 
-            device=device, 
-            batch_size=config["batch_size"],
-            context_length=config["context_length"],
-            output_file=output_file,
-            checkpoint_every=args.checkpoint_every,
-            resume_from=resume_from
+            model=model,
+            dataloader=dataloader,
+            device=device,
+            output_dir=args.output_dir,
+            split_name=split_name,
+            save_every=args.save_every,
+            resume=args.resume,
+            max_batches=args.max_batches
         )
-        
-        print(f"Completed {split_name} dataset")
-    
+        print(f"Completed {split_name} embeddings.")
+
     print("All embeddings have been computed and saved!")
-    print(f"Files are saved in: {args.output_dir}")
-
-
-if __name__ == "__main__":
-    main()
