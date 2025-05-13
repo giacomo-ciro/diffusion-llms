@@ -42,7 +42,7 @@ def step_zero(
     first_pos = torch.zeros(batch_size, dtype=torch.long, device=masked_prompt.device)
 
     for b in range(batch_size):
-        mask_positions = (masked_prompt[b] == mask_id)           # which tokens are still masked?
+        mask_positions = (masked_prompt[b] == mask_id)     # which tokens are still masked?
         if not mask_positions.any():
             # nothing left to predict → return last token
             first_pos[b] = seq_len - 1
@@ -143,6 +143,7 @@ def generate_step_zero_based(
     probe[:, :prompt_len] = prompt
     first_eos_pos = step_zero(model, probe, eos_token_id=eos_token_id,
                               percentile=percentile).item()
+    print(first_eos_pos)
 
     # +1 so that the position itself is included
     pred_seq_len = max(first_eos_pos + 1, prompt_len + 1)
