@@ -46,12 +46,11 @@ print("Loading model...")
 # instantiate the LladaBackbone model
 model = LladaBackbone()
 
-# Save
-probs_buffer = []
-
 # Loop through and save distributions
 print("Forwarding prompts...")
 for group in ["random", "trigger"]:
+    # Save
+    probs_buffer = []
     for prompt in tqdm(prompts[group].values(), desc=f"{group} prompts"):
 
         # Fix: use input_ids (plural) instead of input_id
