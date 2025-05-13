@@ -239,7 +239,7 @@ def main():
     
     # Create model
     model = LLaDaTrainer(
-        model_type=args["type"],
+        model_type=args["model_type"],
         hidden_size=args["hidden_size"],
         context_length=args["context_length"],
         learning_rate=args["learning_rate"],

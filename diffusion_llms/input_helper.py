@@ -56,7 +56,7 @@ def flatten_config(config):
     
     # Training config
     flat_config["batch_size"] = config["training"]["batch_size"]
-    flat_config["lr"] = config["training"]["learning_rate"]
+    flat_config["learning_rate"] = config["training"]["learning_rate"]
     flat_config["n_epochs"] = config["training"]["epochs"]
     flat_config["accumulate_grad"] = config["training"]["accumulate_grad"]
     flat_config["n_steps"] = config["training"]["max_steps"]
@@ -72,10 +72,10 @@ def flatten_config(config):
     flat_config["resume_from_checkpoint"] = config["checkpoint"]["resume_from"]
     
     # Early stopping config
-    flat_config["early_stopping_patience"] = config["early_stopping"]["patience"]
-    flat_config["early_stopping_min_delta"] = config["early_stopping"]["min_delta"]
-    flat_config["early_stopping_monitor"] = config["early_stopping"]["monitor"]
-    flat_config["early_stopping_mode"] = config["early_stopping"]["mode"]
+    flat_config["patience"] = config["early_stopping"]["patience"]
+    flat_config["min_delta"] = config["early_stopping"]["min_delta"]
+    flat_config["monitor"] = config["early_stopping"]["monitor"]
+    flat_config["mode"] = config["early_stopping"]["mode"]
     
     # Logging config
     flat_config["run_name"] = config["logging"]["run_name"]
@@ -83,7 +83,7 @@ def flatten_config(config):
     flat_config["log_dir"] = config["logging"]["log_dir"]
     
     # Model-specific configs - store as nested dicts to access if needed
-    flat_config['type'] = config["model_to_train"]["type"]
+    flat_config['model_type'] = config["model_to_train"]["type"]
     flat_config['output_dir'] = config["model_to_train"]["output_dir"]
     return flat_config
 

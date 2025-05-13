@@ -9,7 +9,7 @@ model:
 
 # Data configuration
 data:
-  embedding_dir: "/Users/vittorio/Projects/uni/Deep learning/diffusion-llms/embedded_datasets"
+  embedding_dir: "/home/3160499/diffusion-llms/embedded_datasets"
   num_workers: 4
   val_test_perc: 0.05
 

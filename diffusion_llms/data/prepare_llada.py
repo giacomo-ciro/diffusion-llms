@@ -145,7 +145,7 @@ def main():
     
     # Process each split
     splits = {
-        'train': datamodule.train_dataloader(),
+        #'train': datamodule.train_dataloader(),
         'val': datamodule.val_dataloader(),
         'test': datamodule.test_dataloader()
     }
