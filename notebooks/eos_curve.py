@@ -78,6 +78,9 @@ for group in ["random", "trigger"]:
         # Save probs
         probs = torch.nn.functional.softmax(logits.to(torch.float64), dim=-1)
         
+        # Zero out probs for already unmasked tokens
+        probs[:prompt.shape[1]] = 0
+        
         # Convert to numpy
         probs = probs.detach().cpu().numpy().tolist()
 
@@ -92,11 +95,7 @@ for group in ["random", "trigger"]:
         arr,
     )
 
-print("Succesffully saved all probs!")
-
-# Test
-print("Loading logits back to plot...")
-for group in ["random", "trigger"]:
+    del arr
     
     # Load back the probs
     arr = np.load(f"{group}_probs.npy")
