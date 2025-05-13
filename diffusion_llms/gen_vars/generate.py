@@ -59,8 +59,8 @@ def step_zero(
         if good.any():
             first_pos[b] = torch.nonzero(good, as_tuple=False)[0, 0]
         else:
-            # if nothing meets the percentile, start at first masked position
-            first_pos[b] = torch.nonzero(mask_positions, as_tuple=False)[0, 0]
+            print("No position reached the threshold, using last masked position")
+            return False
 
     return first_pos
 
@@ -136,16 +136,20 @@ def generate_step_zero_based(
     device = model.device
     prompt_len = prompt.shape[1]
 
+    print(f"[Step Zero Generation] Prompt length: {prompt_len}, max_len: {max_len}, steps: {steps}")
+
     # ────────────────────────────────────
     # 1.  Predict how long the answer will be
     # ────────────────────────────────────
     probe = torch.full((1, max_len), mask_id, dtype=torch.long, device=device)
     probe[:, :prompt_len] = prompt
+    print("[Step Zero Generation] Running step_zero to predict <eos> position...")
     first_eos_pos = step_zero(model, probe, eos_token_id=eos_token_id,
                               percentile=percentile).item()
 
     # +1 so that the position itself is included
     pred_seq_len = max(first_eos_pos + 1, prompt_len + 1)
+    print(f"[Step Zero Generation] Allocated pred_seq_len: {pred_seq_len}")
 
     # ────────────────────────────────────
     # 2.  Allocate the generation tensor
@@ -153,6 +157,7 @@ def generate_step_zero_based(
     x = torch.full((1, pred_seq_len), mask_id, dtype=torch.long, device=device)
     x[:, :prompt_len] = prompt
     prompt_index = (x != mask_id)
+    print(f"[Step Zero Generation] Initial x: {x}")
 
     # ────────────────────────────────────
     # 3.  Pre‑compute how many tokens to
@@ -161,16 +166,13 @@ def generate_step_zero_based(
     # ────────────────────────────────────
     mask_index_init = (x == mask_id)
     num_transfer_tokens = get_num_transfer_tokens(mask_index_init, steps)  # (1, steps)
+    print(f"[Step Zero Generation] num_transfer_tokens per step: {num_transfer_tokens}")
 
     # ────────────────────────────────────
     # 4.  Reverse diffusion
     # ────────────────────────────────────
     for i in range(steps):
-
-        # All tokens resolved?  →  break early
-        if not (x == mask_id).any():
-            break
-
+        print(f"[Step Zero Generation] Step {i+1}/{steps}")
         # ── forward pass ─────────────────
         if cfg_scale > 0.:
             un_x = x.clone()
@@ -193,7 +195,9 @@ def generate_step_zero_based(
         else:
             raise NotImplementedError(remasking)
 
-        # keep already‑fixed tokens untouched mask_index = (x == mask_id)
+        # keep already‑fixed tokens untouched
+        mask_index = (x == mask_id)
+
         confidence = torch.where(mask_index, x0_p, torch.tensor(-float("inf"),
                                                                 device=device))
 
@@ -205,14 +209,16 @@ def generate_step_zero_based(
             if k > 0:
                 _, topk = torch.topk(confidence[b], k=k)
                 transfer_index[b, topk] = True
-
+        print(f"[Step Zero Generation] Step {i+1}: Transferring {transfer_index.sum().item()} tokens.")
         # write them into x
         x[transfer_index] = x0[transfer_index]
+        print(f"[Step Zero Generation] Step {i+1}: x = {x}")
 
+    print(f"[Step Zero Generation] Generation complete. Final x: {x}")
     return x
 
 
-@ torch.no_grad()
+@torch.no_grad()
 def generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
              cfg_scale=0., remasking='low_confidence', mask_id=126336, method='step_zero',
              percentile=0.9
