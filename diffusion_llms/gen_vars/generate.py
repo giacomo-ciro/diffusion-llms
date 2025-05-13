@@ -201,7 +201,7 @@ def generate(model, prompt, steps=128, gen_length=128, block_length=128, tempera
         mask_id: The toke id of [MASK] is 126336.
     '''
     if method == 'step_zero':
-        return generate_step_zero_based(model, prompt, max_len=1024, temperature=temperature,
+        return generate_step_zero_based(model, prompt, max_len=1024, steps=steps, temperature=temperature,
                                         cfg_scale=cfg_scale, remasking=remasking, mask_id=mask_id,
                                         percentile=percentile)
 
