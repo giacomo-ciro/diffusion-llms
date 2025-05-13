@@ -17,15 +17,18 @@ from sklearn.metrics import roc_auc_score
 # Import the embedded data module
 from diffusion_llms.dataloader.llada_from_file import EmbeddedDataModule
 from diffusion_llms.input_helper import get_config
+torch.set_float32_matmul_precision("medium")
+
 
 class LLaDaClassifier(nn.Module):
-    """Classification head for LLaDA"""
+    """Classification head for LLaDA. Takes a single hidden state and outputs a logit."""
     def __init__(self, hidden_size):
         super().__init__()
         self.classifier = nn.Linear(hidden_size, 1)
     
-    def forward(self, hidden_states):
-        return self.classifier(hidden_states).squeeze(-1)
+    def forward(self, hidden_state):
+        # hidden_state: (batch_size, hidden_size)
+        return self.classifier(hidden_state).squeeze(-1)
 
 class LLaDaRegressor(nn.Module):
     """Regression head for LLaDA using pooled output"""
@@ -87,6 +90,10 @@ class LLaDaTrainer(pl.LightningModule):
         if self.model_type == "classifier":
             x = batch["last_hidden"]
             y = batch["eos_labels"].float()
+            # Shuffle the indexes
+            idx = torch.randperm(x.size(0))
+            x = x[idx]
+            y = y[idx]
             
             logits = self.model(x)
             loss = F.binary_cross_entropy_with_logits(

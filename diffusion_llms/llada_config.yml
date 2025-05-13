@@ -10,18 +10,18 @@ model:
 # Data configuration
 data:
   embedding_dir: "/home/3160499/diffusion-llms/embedded_datasets"
-  num_workers: 4
+  num_workers: 1
   val_test_perc: 0.05
 
 # Training parameters
 training:
   batch_size: 4
-  learning_rate: 1e-5
+  learning_rate: 1e-4
   epochs: 1
   accumulate_grad: 1
   max_steps: 5000
   seed: 42
-  val_check_interval: 0.25
+  val_check_interval: 200 # Check validation every 200 steps
 
 # Validation parameters
 validation:
