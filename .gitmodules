@@ -1,0 +1,3 @@
+[submodule "diffusion_llms/llada"]
+    path = diffusion_llms/llada
+    url = https://github.com/ML-GSAI/LLaDA
