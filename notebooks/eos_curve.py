@@ -99,7 +99,7 @@ print("Loading logits back to plot...")
 for group in ["random", "trigger"]:
     
     # Load back the probs
-    arr = np.load(f"{group}_logits.npy")
+    arr = np.load(f"{group}_probs.npy")
     
     # Compute mean along the N dimension
     avg = np.mean(dim = 0)
