@@ -40,9 +40,8 @@ data['is_trigger'] = data.user_prompt.str.contains(pattern, case=False, regex=Tr
 prompts = {}
 prompts["random"] = data[data.is_trigger].sample(N).user_prompt.to_list()
 prompts["trigger"] = data[~data.is_trigger].sample(N).user_prompt.to_list()
-
-
 print("Loading model...")
+
 # instantiate the LladaBackbone model
 model = LladaBackbone()
 
