@@ -608,13 +608,14 @@ def plot_pointwise_difference(all_results, focus_first_n=None, output_dir=OUTPUT
     plt.close('all')
     return diffs
 
-def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_DIR):
+def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_DIR, show_avg_median=True):
     """Create a combined plot with all languages and prompt types.
     
     Args:
         all_results: Dictionary with results for all languages
         focus_first_n: If set, creates a second plot focusing on first N tokens
         output_dir: Directory to save output plots
+        show_avg_median: If True, also show vertical lines for average and median positions
     """
     plt.figure(figsize=(22, 12))
     sns.set(style="whitegrid")
@@ -624,6 +625,8 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
     
     # Dictionary to store max values for vertical lines
     max_positions = {}
+    avg_positions = {}
+    median_positions = {}
     
     # Plot each language and prompt type combination
     for lang in languages:
@@ -651,6 +654,16 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
             # Mark the max with a dot
             marker = 'o' if prompt_type == "regular" else 's'
             ax.plot(max_pos, max_val, marker=marker, markersize=8, color=color)
+            
+            # Calculate average and median positions
+            if show_avg_median:
+                # Weighted average position (weighted by probability)
+                avg_pos = np.sum(np.arange(len(stats["mean"])) * stats["mean"]) / np.sum(stats["mean"])
+                avg_positions[f"{lang}_{prompt_type}"] = {"pos": avg_pos, "val": stats["mean"][int(avg_pos)]}
+                
+                # Median position of max probabilities across samples
+                median_pos = np.median(np.argmax(all_results[lang][prompt_type], axis=1))
+                median_positions[f"{lang}_{prompt_type}"] = {"pos": median_pos, "val": stats["mean"][int(median_pos)]}
     
     # Add vertical lines at max positions
     for key, data in max_positions.items():
@@ -659,6 +672,43 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
         color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
         
         ax.axvline(x=data["pos"], color=color, linestyle=ls, alpha=0.3)
+    
+    # Add vertical lines for average positions if requested
+    if show_avg_median:
+        for key, data in avg_positions.items():
+            lang, prompt_type = key.split('_')
+            color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
+            
+            # Dotted line for average position
+            ax.axvline(x=data["pos"], color=color, linestyle=':', alpha=0.7)
+            
+            # Add annotation for average position
+            ax.annotate(
+                f"{lang.capitalize()} {prompt_type} avg",
+                xy=(data["pos"], data["val"]),
+                xytext=(data["pos"] + 10, data["val"] + 0.1 * data["val"]),
+                arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
+                color=color,
+                fontsize=8
+            )
+        
+        # Add vertical lines for median positions
+        for key, data in median_positions.items():
+            lang, prompt_type = key.split('_')
+            color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
+            
+            # Dash-dotted line for median position
+            ax.axvline(x=data["pos"], color=color, linestyle='-.', alpha=0.7)
+            
+            # Add annotation for median position
+            ax.annotate(
+                f"{lang.capitalize()} {prompt_type} med",
+                xy=(data["pos"], data["val"]),
+                xytext=(data["pos"] - 10, data["val"] - 0.2 * data["val"]),
+                arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
+                color=color,
+                fontsize=8
+            )
     
     ax.set_title(f"Combined EOS Probability Comparison - All Languages & Prompt Types")
     ax.set_xlabel("Position")
@@ -678,6 +728,11 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
     if focus_first_n is not None and focus_first_n > 0:
         plt.figure(figsize=(22, 12))
         ax = plt.gca()
+        
+        # Dictionary to store focused positions
+        focused_max_positions = {}
+        focused_avg_positions = {}
+        focused_median_positions = {}
         
         for lang in languages:
             for prompt_type in ["regular", "trigger"]:
@@ -701,9 +756,75 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                 # Mark local maximum in focused region
                 max_pos_focus = np.argmax(mean_vals)
                 max_val_focus = np.max(mean_vals)
+                focused_max_positions[f"{lang}_{prompt_type}"] = {"pos": max_pos_focus, "val": max_val_focus}
                 
                 marker = 'o' if prompt_type == "regular" else 's'
                 ax.plot(max_pos_focus, max_val_focus, marker=marker, markersize=8, color=color)
+                
+                # Calculate average and median positions within the focused region
+                if show_avg_median:
+                    # Weighted average position (weighted by probability)
+                    if np.sum(mean_vals) > 0:  # Avoid division by zero
+                        avg_pos_focus = np.sum(np.arange(len(mean_vals)) * mean_vals) / np.sum(mean_vals)
+                        focused_avg_positions[f"{lang}_{prompt_type}"] = {
+                            "pos": avg_pos_focus, 
+                            "val": mean_vals[int(avg_pos_focus)]
+                        }
+                    
+                    # Median position of max probabilities across samples within focus area
+                    focused_samples = all_results[lang][prompt_type][:, :focus_first_n]
+                    max_positions_focused = np.argmax(focused_samples, axis=1)
+                    median_pos_focus = np.median(max_positions_focused)
+                    focused_median_positions[f"{lang}_{prompt_type}"] = {
+                        "pos": median_pos_focus,
+                        "val": mean_vals[int(median_pos_focus)]
+                    }
+        
+        # Add vertical lines for maximum positions in focused view
+        for key, data in focused_max_positions.items():
+            lang, prompt_type = key.split('_')
+            ls = '-' if prompt_type == "regular" else '--'
+            color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
+            
+            ax.axvline(x=data["pos"], color=color, linestyle=ls, alpha=0.3)
+        
+        # Add vertical lines and annotations for average and median positions if requested
+        if show_avg_median:
+            for key, data in focused_avg_positions.items():
+                lang, prompt_type = key.split('_')
+                color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
+                
+                # Dotted line for average position
+                ax.axvline(x=data["pos"], color=color, linestyle=':', alpha=0.7)
+                
+                # Add annotation (only if not too crowded)
+                if lang == languages[0] or len(languages) <= 2:  # Only annotate first language or if we have 2 or fewer languages
+                    ax.annotate(
+                        f"{lang} {prompt_type} avg",
+                        xy=(data["pos"], data["val"]),
+                        xytext=(data["pos"] + 1, data["val"] + 0.1 * data["val"]),
+                        arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
+                        color=color,
+                        fontsize=8
+                    )
+            
+            for key, data in focused_median_positions.items():
+                lang, prompt_type = key.split('_')
+                color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
+                
+                # Dash-dotted line for median position
+                ax.axvline(x=data["pos"], color=color, linestyle='-.', alpha=0.7)
+                
+                # Add annotation (only if not too crowded)
+                if lang == languages[-1] or len(languages) <= 2:  # Only annotate last language or if we have 2 or fewer languages
+                    ax.annotate(
+                        f"{lang} {prompt_type} med",
+                        xy=(data["pos"], data["val"]),
+                        xytext=(data["pos"] - 1, data["val"] - 0.2 * data["val"]),
+                        arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
+                        color=color,
+                        fontsize=8
+                    )
         
         ax.set_title(f"Combined EOS Probability - First {focus_first_n} Tokens")
         ax.set_xlabel("Position")
@@ -742,9 +863,18 @@ def load_results_from_files(input_dir=DEFAULT_INPUT_DIR):
     
     return results
 
-def create_visualizations(results, focus_first_n=None, output_dir=OUTPUT_DIR):
-    """Generate all visualizations from pre-computed results."""
+def create_visualizations(results, focus_first_n=None, output_dir=OUTPUT_DIR, show_avg_median=True):
+    """Generate all visualizations from pre-computed results.
+    
+    Args:
+        results: Dictionary with results for all languages
+        focus_first_n: If set, creates a second plot focusing on first N tokens
+        output_dir: Directory to save output plots
+        show_avg_median: If True, also show vertical lines for average and median positions
+    """
     print("\nGenerating visualizations...")
+    if show_avg_median:
+        print("Including average and median position indicators")
     
     # Compare languages for each prompt type
     for prompt_type in ["regular", "trigger"]:
@@ -761,7 +891,7 @@ def create_visualizations(results, focus_first_n=None, output_dir=OUTPUT_DIR):
     diffs = plot_pointwise_difference(results, focus_first_n, output_dir)
     
     # Create combined comparison
-    plot_combined_comparison(results, focus_first_n, output_dir)
+    plot_combined_comparison(results, focus_first_n, output_dir, show_avg_median)
     
     # Print summary statistics
     print("\nSUMMARY OF RESULTS:")
@@ -808,6 +938,14 @@ def main():
     parser.add_argument(
         "--focus", type=int, default=DEFAULT_FOCUS_TOKENS,
         help=f"Number of tokens to focus on in zoomed views (default: {DEFAULT_FOCUS_TOKENS})"
+    )
+    parser.add_argument(
+        "--show-avg-median", action="store_true", default=True,
+        help="Show vertical lines for average and median positions (default: True)"
+    )
+    parser.add_argument(
+        "--no-avg-median", dest="show_avg_median", action="store_false",
+        help="Don't show vertical lines for average and median positions"
     )
     
     args = parser.parse_args()
@@ -860,7 +998,7 @@ def main():
                 np.save(output_path, np.array(results[language][prompt_type]))
         
         # Generate visualizations
-        create_visualizations(results, args.focus, args.output_dir)
+        create_visualizations(results, args.focus, args.output_dir, args.show_avg_median)
         
     else:  # Visualization-only mode
         print("Running in VISUALIZE mode: creating plots from existing data")
@@ -868,7 +1006,7 @@ def main():
         results = load_results_from_files(args.input_dir)
         
         # Generate visualizations
-        create_visualizations(results, args.focus, args.output_dir)
+        create_visualizations(results, args.focus, args.output_dir, args.show_avg_median)
 
 if __name__ == "__main__":
     main()
