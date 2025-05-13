@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn.functional as F
 
 from transformers import AutoTokenizer, AutoModel
+import time
 
 def step_zero(model, masked_prompt, eos_token_id=2, percentile=0.9):
     """
@@ -202,13 +203,28 @@ def main():
 
     # Add special tokens for the Instruct model. The Base model does not require the following two lines.
     m = [{"role": "user", "content": prompt}, ]
-    prompt = tokenizer.apply_chat_template(m, add_generation_prompt=True, tokenize=False)
+    prompt_text = tokenizer.apply_chat_template(m, add_generation_prompt=True, tokenize=False)
 
-    input_ids = tokenizer(prompt)['input_ids']
+    input_ids = tokenizer(prompt_text)['input_ids']
     input_ids = torch.tensor(input_ids).to(device).unsqueeze(0)
 
-    out = generate(model, input_ids, steps=128, gen_length=128, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence')
-    print(tokenizer.batch_decode(out[:, input_ids.shape[1]:], skip_special_tokens=True)[0])
+    # Generate with step_zero method
+    start_time = time.time()
+    out_step_zero = generate(model, input_ids, steps=128, gen_length=128, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence', method='step_zero')
+    elapsed_step_zero = time.time() - start_time
+
+    print("Step Zero Generation:")
+    print(tokenizer.batch_decode(out_step_zero[:, input_ids.shape[1]:], skip_special_tokens=True)[0])
+    print(f"Step Zero Generation took {elapsed_step_zero:.2f} seconds\n")
+
+    # Generate with default method
+    start_time = time.time()
+    out_default = generate(model, input_ids, steps=128, gen_length=128, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence', method='default')
+    elapsed_default = time.time() - start_time
+
+    print("Default Generation:")
+    print(tokenizer.batch_decode(out_default[:, input_ids.shape[1]:], skip_special_tokens=True)[0])
+    print(f"Default Generation took {elapsed_default:.2f} seconds")
 
 
 if __name__ == '__main__':
