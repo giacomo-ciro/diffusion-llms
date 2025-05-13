@@ -14,7 +14,7 @@ class LladaBackbone(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
-        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
+        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
         # The transformer model
         self.transformer = base_model.model.transformer
 
