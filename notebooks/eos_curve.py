@@ -118,7 +118,7 @@ for group in ["random", "trigger"]:
     plt.yticks(np.arange(0, np.max(avg) + np.std(avg), step=0.1))
     plt.xlim(0, 1024)
     plt.ylim(0, 1)
-    plt.plot(arr, color='blue', label='Eos probabilities')
+    plt.plot(avg, color='blue', label='Eos probabilities')
     print(f"Successfully saved plot saved to {path}")
 
 print("Done!")
