@@ -6,7 +6,7 @@ __pycache__
 */wandb/
 */local_config*
 */checkpoints
-
+*.pt
 diffusion-llms/data/*/
 !diffusion-llms/data/recipe/
 
