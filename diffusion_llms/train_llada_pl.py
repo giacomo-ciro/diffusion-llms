@@ -283,15 +283,20 @@ def main():
         val_check_interval=args["val_check_interval"],
         log_every_n_steps=10
     )
+
+    
     
     # Train model
-    trainer.fit(model, data_module, ckpt_path=args.get("resume", None))
+    trainer.fit(model, 
+                data_module.train_dataloader(), 
+                data_module.val_dataloader(),
+                ckpt_path=args.get("resume", None))
     
     # Save final model
     trainer.save_checkpoint(os.path.join(args["output_dir"], f'final_{args["model_type"]}_model.ckpt'))
     
     # Test model
-    trainer.test(model, data_module)
+    trainer.test(model, data_module.test_dataloader())
     
     final_model_path = os.path.join(args["output_dir"], f"final_{args['model_type']}_model.ckpt")
     print(f"Training completed! Final model saved to: {final_model_path}")
