@@ -51,7 +51,7 @@ print("Forwarding prompts...")
 for group in ["random", "trigger"]:
     # Save
     probs_buffer = []
-    for prompt in tqdm(prompts[group].values(), desc=f"{group} prompts"):
+    for prompt in tqdm(prompts[group], desc=f"{group} prompts"):
 
         # Fix: use input_ids (plural) instead of input_id
         prompt = model.tokenizer(prompt, return_tensors="pt").input_ids
