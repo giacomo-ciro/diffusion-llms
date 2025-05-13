@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModel
 import time
 
-def step_zero(model, masked_prompt, eos_token_id=2, percentile=0.9):
+def step_zero(model, masked_prompt, eos_token_id=126081, percentile=0.1):
     """
     Initializes the generation process by using the model and the masked prompt to compute
     the expected length of the sentence at the first step.
@@ -29,7 +29,7 @@ def step_zero(model, masked_prompt, eos_token_id=2, percentile=0.9):
     # Find the first position where eos_logits >= threshold for each batch
     meets_threshold = eos_logits >= threshold  # shape: (batch, seq_len)
     # Use argmax on the boolean mask; if never met, returns 0
-
+    
     first_pos = meets_threshold.float().cumsum(dim=-1).eq(1).float().argmax(dim=-1)
 
     return first_pos
@@ -83,8 +83,8 @@ def generate_step_zero_based(
         cfg_scale: float = 0.,
         remasking: str = 'low_confidence',
         mask_id: int = 126336,
-        percentile: float = .9,
-        eos_token_id: int = 2,
+        percentile: float = .1,
+        eos_token_id: int = 126081,
 ):
     """
     “One‑shot” generation that
@@ -101,7 +101,7 @@ def generate_step_zero_based(
     assert prompt.shape[0] == 1, "Only batch size of 1 is supported for step-zero generation"
     assert steps <= max_len, "Steps must be less than or equal to max_len" 
     #check prompt is shorter than max_len
-    assert steps <= prompt.shape[1], "Steps must be less than or equal to the length of the prompt"
+    assert prompt.shape[1] <= max_len, "Prompt length must be less than or equal to max_len"
 
     device = model.device
     prompt_len = prompt.shape[1]
