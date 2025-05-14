@@ -161,8 +161,7 @@ class LLaDaRegressor(nn.Module):
         self.regressor = nn.Sequential(
             nn.Linear(hidden_size, hidden_size//2),
             nn.ReLU(),
-            nn.Linear(hidden_size//2, 1),
-            nn.ReLU(),
+            nn.Linear(hidden_size//2, 1)
         )
     
     def forward(self, polled_hidden_states):
@@ -182,8 +181,7 @@ class LLaDaFullRegressor(nn.Module):
         self.full_regressor = nn.Sequential(
             nn.Linear(hidden_size * context_length, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, 1),
-            nn.ReLU(),
+            nn.Linear(hidden_size, 1)
         )
 
     def forward(self, hidden_states):
@@ -290,7 +288,8 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
-            loss = F.mse_loss(torch.exp(preds), y_normalized)
+            preds = torch.exp(preds)
+            loss = F.mse_loss(preds, y_normalized)
             
             # Log metrics
             self.log('train/loss', loss, prog_bar=True)
@@ -366,7 +365,8 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
-            loss = F.mse_loss(torch.exp(preds), y_normalized)
+            preds = torch.exp(preds)
+            loss = F.mse_loss(preds, y_normalized)
             
             # Log metrics
             self.log('val/loss', loss, prog_bar=True)
@@ -454,8 +454,27 @@ class LLaDaTrainer(pl.LightningModule):
             np.save(os.path.join(self.logger.save_dir, "regression_preds_full.npy"), preds_np)
     
     def configure_optimizers(self):
-        """Configure optimizer for the model"""
-        return torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate)
+        """Configure optimizer with OneCycleLR scheduler"""
+        optimizer = torch.optim.AdamW(
+            self.model.parameters(),
+            lr=self.learning_rate # will be reset by onecycle lr
+        )
+        
+        # Create the OneCycleLR scheduler
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=self.learning_rate,
+            total_steps=self.trainer.estimated_stepping_batches
+        )
+        
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }   
 
     def on_save_checkpoint(self, checkpoint: dict) -> None:
         # keep only keys under "model" (i.e. your classifier/regressor head)
@@ -527,7 +546,9 @@ def main():
         logger=logger,
         callbacks=callbacks,
         val_check_interval=args["val_check_interval"],
-        log_every_n_steps=10
+        log_every_n_steps=10,
+        gradient_clip_algorithm="norm",
+        gradient_clip_val=1.0
     )
 
     # Train model
