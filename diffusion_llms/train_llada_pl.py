@@ -177,7 +177,7 @@ class LLaDaFullRegressor(nn.Module):
         self.full_regressor = nn.Sequential(
             nn.Linear(hidden_size * context_length, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size * context_length, 1),
+            nn.Linear(hidden_size, 1),
             nn.ReLU(),
         )
 
@@ -218,6 +218,7 @@ class LLaDaTrainer(pl.LightningModule):
             self.model = LLaDaRegressor(hidden_size)
         elif model_type == "full_regressor":
             self.model = LLaDaFullRegressor(context_length, hidden_size)
+            print(self.model)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
     
