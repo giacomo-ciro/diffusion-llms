@@ -157,7 +157,9 @@ class LLaDaRegressor(nn.Module):
     """Regression head for LLaDA using pooled output"""
     def __init__(self, hidden_size):
         super().__init__()
+        self.hidden_size = hidden_size
         self.regressor = nn.Linear(hidden_size, 1)
+
     
     def forward(self, polled_hidden_states):
         # hidden_states: [B, D]
@@ -165,7 +167,6 @@ class LLaDaRegressor(nn.Module):
         # Check if shape is correct
         assert polled_hidden_states.dim() == 2, f"Expected 3D tensor, got {polled_hidden_states.dim()}D tensor"
         assert polled_hidden_states.size(1) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {polled_hidden_states.size(2)}"
-
 
         return self.regressor(polled_hidden_states).squeeze(-1)
 
