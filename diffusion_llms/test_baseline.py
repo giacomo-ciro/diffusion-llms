@@ -1,4 +1,4 @@
-from train_llada_pl import LladaBackbone
+from diffusion_llms.train_llada_pl import LladaBackbone
 from diffusion_llms.dataloader.llada_dataloader import DataModule
 from diffusion_llms.input_helper import get_config
 from transformers import AutoTokenizer
