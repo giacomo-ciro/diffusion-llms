@@ -129,8 +129,7 @@ def generate_text(model, tokenizer, prompt, config, max_new_tokens=None, tempera
                 temperature=temp,
                 top_k=top_k,
                 denoising_strategy=denoising_strategy,
-                diffusion_steps=diffusion_steps,
-                var_len=False  # This parameter is required by the model
+                diffusion_steps=diffusion_steps
             )
             # Take the last output from diffusion steps
             output_ids = outputs[-1][0]
@@ -205,7 +204,22 @@ def evaluate_bbh(model, tokenizer_tiktoken, config, num_samples=10, debug=False)
         try:
             # Load dataset
             ds = load_dataset("lukaemon/bbh", task, trust_remote_code=True)
-            samples = ds["test"][:num_samples]
+            
+            # BBH dataset could have string indices, ensure we're using them properly
+            test_data = ds["test"]
+            if num_samples < len(test_data):
+                # Get the first n samples safely, handling both int and string indices
+                if isinstance(test_data, dict) and all(isinstance(k, str) for k in test_data.keys()):
+                    # Dataset with string keys - take a subset of keys
+                    keys = list(test_data.keys())[:num_samples]
+                    samples = [test_data[k] for k in keys]
+                else:
+                    # Dataset with integer indices
+                    test_indices = list(range(min(num_samples, len(test_data))))
+                    samples = [test_data[i] for i in test_indices]
+            else:
+                # If num_samples is greater than dataset size, use the entire dataset
+                samples = test_data
             
             correct = 0
             total = 0
@@ -377,7 +391,16 @@ def evaluate_minerva(model, tokenizer_tiktoken, config, num_samples=10, debug=Fa
         
         for category in categories:
             print(f"Evaluating category: {category}")
-            samples = ds[category][:num_samples]
+            
+            # Get samples safely with proper indices
+            category_data = ds[category]
+            if num_samples < len(category_data):
+                # Get subset of data using integer indices
+                test_indices = list(range(min(num_samples, len(category_data))))
+                samples = [category_data[i] for i in test_indices]
+            else:
+                # Use entire dataset
+                samples = category_data
             
             correct = 0
             total = 0
@@ -474,11 +497,14 @@ def evaluate_humaneval(model, tokenizer_tiktoken, tokenizer_hf, config, num_samp
             
         # Load dataset
         ds = load_dataset("openai_humaneval")
-        samples = ds["test"]
         
-        # Use all samples unless specified otherwise
+        # Human eval dataset has integer indices, ensure we're using them properly
         if num_samples is not None:
-            samples = samples[:num_samples]
+            test_indices = list(range(min(num_samples, len(ds["test"]))))
+        else:
+            test_indices = list(range(len(ds["test"])))
+            
+        samples = [ds["test"][i] for i in test_indices]
         
         results = []
         successful_executions = 0
@@ -572,7 +598,10 @@ def evaluate_mbpp(model, tokenizer_tiktoken, config, num_samples=10, debug=False
     try:
         # Load dataset
         ds = load_dataset("mbpp")
-        samples = ds["test"][:num_samples]
+        
+        # MBPP dataset has integer indices, ensure we're using them properly
+        test_indices = list(range(min(num_samples, len(ds["test"]))))
+        samples = [ds["test"][i] for i in test_indices]
         
         results = []
         successful_executions = 0

@@ -1,0 +1,151 @@
+{
+  "results": {
+    "bbh": {
+      "navigate": {
+        "accuracy": 0.0,
+        "correct": 0,
+        "total": 1,
+        "examples": [
+          {
+            "prompt": "If you follow these instructions, do you return to the starting point? Always face forward. Take 1 step backward. Take 9 steps left. Take 2 steps backward. Take 6 steps forward. Take 4 steps forward. Take 4 steps backward. Take 3 steps right.\nOptions:\n- Yes\n- No",
+            "generated": "+ No?\nNo + Yes?\n- Yes\nWhat is output?\nAfter choosing \u201cSave\u201d, access the Content tab with export button in Translegage application.\nAfter your promised model run, you can export it to a Trans.legage file as PDF digital ebook, document. At the front of that document you will see a document report and Translegage will record you the future progress.Promising BrentFast SDK \u2013 Official Launch of the Team\u2019s Intelligent Radio Reporting Forecast (RBRK). www.tiger Ringer Truck DevBackers /Omins Mentus Blog Articles \u2013 Website Control Panel (SSGCP) Email and Domain File upload Help Service Help Manage all domain names, agent and WP groups; Domain Names And Domain Concept ; File Uploader Access All Engine template files Browse and Technical Framework Design Gift Badge Gift Card \u2013 Most year students get a Free Account Entry iners Website and can get exclusive Premium Updates by Posting Of Their Course and Gemembering latest Tutorials and Videos as per the Exam Admissions\nAuditrite Color \u2013 This is highly useful in computer vision console in movies or add visual console with an Embedding UI with your favorite televisions postmore /Omins vlut",
+            "target": "No",
+            "is_correct": false
+          }
+        ]
+      },
+      "causal_judgment": {
+        "error": "BuilderConfig 'causal_judgment' not found. Available: ['boolean_expressions', 'causal_judgement', 'date_understanding', 'disambiguation_qa', 'dyck_languages', 'formal_fallacies', 'geometric_shapes', 'hyperbaton', 'logical_deduction_five_objects', 'logical_deduction_seven_objects', 'logical_deduction_three_objects', 'movie_recommendation', 'multistep_arithmetic_two', 'navigate', 'object_counting', 'penguins_in_a_table', 'reasoning_about_colored_objects', 'ruin_names', 'salient_translation_error_detection', 'snarks', 'sports_understanding', 'temporal_sequences', 'tracking_shuffled_objects_five_objects', 'tracking_shuffled_objects_seven_objects', 'tracking_shuffled_objects_three_objects', 'web_of_lies', 'word_sorting']"
+      },
+      "date_understanding": {
+        "accuracy": 0.0,
+        "correct": 0,
+        "total": 1,
+        "examples": [
+          {
+            "prompt": "Today is Christmas Eve of 1937. What is the date tomorrow in MM/DD/YYYY?\nOptions:\n(A) 12/11/1937\n(B) 12/25/1937\n(C) 01/04/1938\n(D) 12/04/1937\n(E) 12/25/2006\n(F) 07/25/1937",
+            "generated": "(E) Even 12/28/1936 or DD17-00 on a weekday for DD19/33?\nTomorrow and then STYY BLOCKHoliday day are supposed to be March of Tiffany Bout, clearly not March of 1937. The roots for 1946 S|DS\u201912 also received dates however. Coming from a place many of its predecessor Bert Henry A Hill changed to DD18 DELACCOUNT.\nPick this date, then use DD18 DELACCOUNT of MS (12 ppt for period well) orDD18/LDORIM/MON/YYYY and send the result to you within TIFTP or CSV file format.\nTo check the results press YES/SWIFT on input and Enter. (Just won\u2019t show results in popup). Some days (4 minutes) a week or until Monday will open up to the following four days being available.\nIn this week\u2019s article on the importance of specifying hidden and hidden functions in the programme and code analysis file. By understanding them, we have an overview of the insights necessary for successful software development.\nOur programs provide quality data and tools that supports the development journey of programmers. We are designed to help programmers in various approaches.\nCode Analysis FileDefinition",
+            "target": "(B)",
+            "is_correct": false
+          }
+        ]
+      },
+      "overall": {
+        "accuracy": 0.0,
+        "correct": 0,
+        "total": 2
+      }
+    },
+    "gsm8k": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "total": 1,
+      "examples": [
+        {
+          "question": "Janet\u2019s ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+          "generated": "Step 3-114 - Minimize Monetary TakeoverThe TreasuryMonth\nTest your hypothesis with our 10 frequently asked questions.\n- Check out the free tweets:\n- Doesnobody have a birdwalking camera?\n- Wanna take time out to walk and biking during the day?\nYou can find Amy\u2019s tribute to this cute fellow on Pinterest.\nWant to meet the cute Valentine at Kirsten Page below? Click To Tweet\nJames Kial profiles in two photos from his visit at Janet\u2019s Dump Marketplace:\nJanet\u2019s Dump headshots mugging: inst.twitter.com/4TheH151udkYWCqxCL\nMyri deewter is a social worker at Poplar Gym, and wellness \ufb01ner with neurolog loss,existing disorders needed medication, learning for pain,hairpaths fear ideation, evaluation for anger and much more. From making and running a tasty food supplement, he has managed to make a lot of money centered around health media accounts and diets. That effortlessly represents the fact that the magic is so invisible it affects the brain. Common reasons that diet supplements are often known to hide are high-cost production or legit side effects from clients. There isn\u2019t everyone reporting concerning adverse reactions caused by the supplement... maybe someone in your life, or you know, is a cat,. You are more likely to find that negative side effects the product have, and this isn\u2019t always true.\nWhat\u2019s a downside of the supplement is that products or statements do not match the supplement review declarations. However, all of the supplement's negative side effects are listed as supplemental supplements, and the ads from publicinterests, movies or television are on the supplement licensing or labeling your\nSure!Link reviews and ads content ratings Elizabeth\u2019s repressiss approval line food food based on ratings\nTo know more about Jeju David\u2019s, our favorite company listing disclosure products on subject by visiting this link\nFind this page and attach useful links to these The best marketing for your White city is good marketing! That\u2019 you can licenses and exclusive statement with and and distribution labeling items coloring special an official distribution and their cartoons from incorporating only and discrimination products and projects. her adult addiction nutrition and formulas and are reflecting and program official concentrations products that home care screening orment custom one change or being available and and bip royalty filming licensing impact, are taking are these experiencing symptoms Supplement that one are activities one addiction",
+          "reference_answer": "18",
+          "predicted_answer": "com/4TheH151udkYWCqxCL\nMyri deewter is a social worker at Poplar Gym, and wellness \ufb01ner with neurolog loss,existing disorders needed medication, learning for pain,hairpaths fear ideation, evaluation for anger and much more",
+          "is_correct": false
+        }
+      ]
+    },
+    "minerva": {
+      "error": "Dataset 'hendrycks/math' doesn't exist on the Hub or cannot be accessed."
+    },
+    "humaneval": {
+      "pass_rate": 0.0,
+      "successful_executions": 0,
+      "total": 1,
+      "avg_meteor": 0,
+      "examples": [
+        {
+          "task_id": "HumanEval/0",
+          "prompt": "from typing import List\n\n\ndef has_close_elements(numbers: List[float], threshold: float) -> bool:\n    \"\"\" Check if in given list of numbers, are any two numbers closer to each other than\n    given threshold.\n    >>> has_close_elements([1.0, 2.0, 3.0], 0.5)\n    False\n    >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)\n    True\n    \"\"\"\n",
+          "generated": "has_close_elements = If if one is combined and multiplied in the quantity of its|[] in its response|\nRit^ ceases to have the same sum as the sum of computationsSince it is the final, repeatable part of a collection of processes, many transactions may leave the result of a process unresolved. Thus, a user has to check through these results for what is concluded and for the procedure remains to. These forces make it possible to hold a range of resulting procedures to have the same results in the same system, in particular liquid liquid (dynamic cross-ference).\n(elossound (quantum gradients,vari intervals) elossound(difference tens,ydd) or zero(difference-out data) forest computed,this process upsidesfactor(multiple row-scale,paramulo or non-linear, hyperlinear or nonlinear adjustment),logical and linear, sematholized fields(large delta and change of the normal, counter-parametric or tripled(constant),\nmicne proportion displacement when the function is applied, dual geometry,aturated,center in same row); other operations can be performed by repeating this procedure.\nTo say, if the user does not understand the result of an action and that they complain about an underlying calculation error then the entire equations will remain computable after completing that action.\nBy using this procedure, 8 users will be organized in these groups:\n(pot-coefficientscrossover and bulky or alternately X and Y vertical, running time bytes and line) and lots.\nchoosing chart drawing, apex blog widget for task automate a demand [third_thumb> | Our list instance would be [Number]\nYOUR LIST PRICE: [IMONE] TITLES: Fixed, calculated,Number onecopper- performance,co multiple andcoole multiplication or and 17 two like z or total and data and 14/n, or minimumomhood automatic multiplication integer batching two, andesync compactately, and tens square and,\n two diagonal conversions bar and, acceleration multipleswidth number grid bars, Y ratios setbar,\n, tartar, and one functions ofbar industrial chartbar bar two, AI and an, AI of an bunch,, values of AIing and capacity and loads for bars and automation adjust and algorithm being variable AI chart set certain free design ve a a demand, chart of tasks / own task spreadsheet\ndriven andline of mapping of resources a",
+          "canonical_solution": "    for idx, elem in enumerate(numbers):\n        for idx2, elem2 in enumerate(numbers):\n            if idx != idx2:\n                distance = abs(elem - elem2)\n                if distance < threshold:\n                    return True\n\n    return False\n",
+          "is_executable": false,
+          "meteor_score": 0.0
+        }
+      ]
+    },
+    "mbpp": {
+      "pass_rate": 0.0,
+      "successful_executions": 0,
+      "total": 1,
+      "examples": [
+        {
+          "task_id": 11,
+          "text": "Write a python function to remove first and last occurrence of a given character from the string.",
+          "generated": "defined character-addresses() function does not affect throw a string for any object.\n# Write a python function to delete a character *stringence* from a field filled with an onion string.\n# Import a\nString <~response instead() form to set the value and validity of arguments with a string.\n# Write your onion string.\n# Execute a command to get the functionality defined in the command.\nconstrate a string from the root of a given function.\n\nchoose an onion string with which you cannot, then subtract it from the onion string.How should I view peripherals Pro/ProE-Dock \u2013 Quick Start\n- message ID when notifications have been made on the B2C Toollist?\nShowing notification ID\nAfter rejoining the checklist, no other notifications can be found on the BSC Call call\nHow can I be notified on the Port/Automatic C09-9 Large Tool Check Screen: Can I use with the Vive\u00ae Macro Hydromiser for I/Do applications?\n- The following manufacturer-recommended materials to use for Port+Rw case:\n- CAN Bus Adapter for SAE7.3.2*888.320(0.3\n.\nDo graphics card or controller updates effect the Studio 360 monitor?\n- Mac connection recommended The controls are enabled for connectivity. The real-time performance displays under \u201cControl Settings\u201d in the Monitor.\nWhat are the default controls on a Remote Viewer?\n- A Remote Viewer for Studio 360 supports Proper settings for Connections and Audio\n- Event Notification when remote parameters are Changed and When Adding Offline Alerts and Operator Scan Event warnings on the Test Monitor.\nWhich keyboard gestures are supported for a ring dial?\nBitters and larger facets can not be used with dials.ProDuty Limiter Compatibility and Parts Table\u201dDue to make-than-expected arrivals and pre-Head Care Food Inspection\u201d November has been full Wednesday-Jan-tuesday for its start plus Halloween Friday, no sodas, non-green, pumpkin and candy! The CDC for Disease Control and Prevention (DH&P), is offering a system for introducing ASPEC to help reduce the risk of low-grade chlorinated organic product (CHCP).\nMYCHOCA is a disease caused by toxic toxic compounds found High\ufffd00 and late,\u201dal\ufffd\ufffdatum,, Wednesday to \ufffd, grandular conference, wheat, Ham conference",
+          "reference": "def remove_Occ(s,ch): \r\n    for i in range(len(s)): \r\n        if (s[i] == ch): \r\n            s = s[0 : i] + s[i + 1:] \r\n            break\r\n    for i in range(len(s) - 1,-1,-1):  \r\n        if (s[i] == ch): \r\n            s = s[0 : i] + s[i + 1:] \r\n            break\r\n    return s ",
+          "is_executable": false,
+          "passes_tests": false,
+          "test_list": [
+            "assert remove_Occ(\"hello\",\"l\") == \"heo\"",
+            "assert remove_Occ(\"abcda\",\"a\") == \"bcd\"",
+            "assert remove_Occ(\"PHP\",\"P\") == \"H\""
+          ]
+        }
+      ]
+    }
+  },
+  "config": {
+    "pipeline": "diffusion",
+    "init_from": "diffugpt",
+    "memmap_path": "./data/02052025121536/var_len_train_38K_1024.bin",
+    "padded_dataset": true,
+    "pad_masked_perc": 0.15,
+    "pad_annealing_steps": 100,
+    "context_length": 1024,
+    "n_embd": 768,
+    "n_layer": 12,
+    "n_head": 12,
+    "resume_training": false,
+    "attn_annealing_steps": 1000,
+    "mask_id": 10541,
+    "eos_token_id": 50256,
+    "pad_token_id": 50257,
+    "use_eos_head": false,
+    "use_pad_head": false,
+    "n_epochs": 1,
+    "n_steps": 1,
+    "val_check_interval": 1,
+    "val_test_perc": 0.05,
+    "batch_size": 8,
+    "accumulate_grad": 16,
+    "grad_clip": 1,
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "weight_decay": 0.01,
+    "max_lr": 0.0006,
+    "warmup_pct": 0.1,
+    "div_factor": 25.0,
+    "final_div_factor": 10000.0,
+    "enable_checkpointing": true,
+    "save_dir": "./checkpoints/",
+    "wandb": false,
+    "run_name": "diffugpt-pretrained-finewebtext-baseline",
+    "project_name": "diffusion-llms",
+    "user_prompt": "Once upon a time",
+    "n_samples": 1,
+    "temperature": 1.0,
+    "max_new_tokens": 512,
+    "top_k": null,
+    "diffusion_steps": 64,
+    "repetition_penalty": 1.2,
+    "do_sample": false,
+    "denoising_strategy": "random",
+    "_comment": "Parameters below added/modified for eval_eos.py",
+    "ckpt_path_for_eval": "../checkpoints/ymd_250502_HMS_12_35_44/epoch_0_ce_9.90.ckpt",
+    "test_data_path_for_eval": "../data/02052025121536/var_len_test_380K_1024.bin",
+    "eval_batch_size": 16,
+    "random_mask_prob": 0.15,
+    "eos_window_max": 100,
+    "window_annealing_steps": 5000
+  },
+  "timestamp": "2025-05-14 09:53:28",
+  "samples_per_task": 1
+}

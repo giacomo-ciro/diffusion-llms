@@ -617,6 +617,7 @@ class GPT2(pl.LightningModule):
         elif pipeline == "diffusion":
             assert diffusion_steps is not None
             assert denoising_strategy is not None
+            # Drop var_len parameter if it's not accepted by generate_diffusion
             xs = self.generate_diffusion(
                 input_ids,
                 max_new_tokens = max_new_tokens,
@@ -624,7 +625,6 @@ class GPT2(pl.LightningModule):
                 top_k=top_k,
                 denoising_strategy=denoising_strategy,
                 diffusion_steps = diffusion_steps,
-                var_len=var_len,
             )
             return xs
         
