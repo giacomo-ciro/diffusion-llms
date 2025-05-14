@@ -161,6 +161,7 @@ class LLaDaRegressor(nn.Module):
         self.regressor = nn.Sequential(
             nn.Linear(hidden_size, hidden_size//2),
             nn.ReLU(),
+            nn.Dropout(p=0.2),
             nn.Linear(hidden_size//2, 1)
         )
     
@@ -181,6 +182,7 @@ class LLaDaFullRegressor(nn.Module):
         self.full_regressor = nn.Sequential(
             nn.Linear(hidden_size * context_length, hidden_size),
             nn.ReLU(),
+            nn.Dropout(p=0.2),
             nn.Linear(hidden_size, 1)
         )
 
