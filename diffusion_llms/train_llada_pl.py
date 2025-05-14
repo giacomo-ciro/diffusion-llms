@@ -13,6 +13,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 from sklearn.metrics import roc_auc_score
+from transformers import AutoTokenizer, AutoModel
+import hashlib
 
 # Import the embedded data module
 from diffusion_llms.dataloader.llada_from_file import EmbeddedDataModule
@@ -20,14 +22,129 @@ from diffusion_llms.input_helper import get_config
 torch.set_float32_matmul_precision("medium")
 
 
+class LladaBackbone(pl.LightningModule):
+    def __init__(self, cache_dir="cache", use_mean_pooling=True):
+        super().__init__()
+        self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
+        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
+        self.transformer = base_model.model.transformer
+        self.lm_head = self.transformer.pop("ff_out")
+
+        self.cache_dir = cache_dir
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self.use_mean_pooling = use_mean_pooling
+
+    def _get_cache_path(self, input_ids: torch.Tensor) -> str:
+        # Hash input ids
+        input_hash = hashlib.md5(input_ids.cpu().numpy().tobytes()).hexdigest()
+        return os.path.join(self.cache_dir, f"{input_hash}.pt")
+
+    def _load_or_compute_hidden(self, input_ids: torch.Tensor):
+        path = self._get_cache_path(input_ids)
+
+        if os.path.exists(path):
+            hidden = torch.load(path, map_location=self.device)
+        else:
+                hidden = self.forward_hidden_repr(input_ids)
+                torch.save(hidden.cpu(), path)
+
+        return hidden
+
+    def forward(self, input_ids, target=None):
+        return self._load_or_compute_hidden(input_ids)   
+
+    def forward_hidden_repr(self, input_ids, attention_mask=None):
+        """
+        Forward pass through the transformer encoder to obtain the hidden states,
+        excluding the final language modeling head (ff_out).
+        
+        Args:
+            input_ids: Tensor of shape (batch_size, sequence_length) or a tuple
+                    from which a tensor can be extracted.
+            attention_mask: Optional tensor of shape (batch_size, sequence_length)
+            
+        Returns:
+            hidden_states: Tensor of shape (batch_size, sequence_length, hidden_dim)
+        """
+
+        # Attempt to robustly extract the core tensor from input_ids if it's a tuple
+        current_val = input_ids
+        while isinstance(current_val, tuple):
+            if not current_val: # Check for empty tuple
+                raise ValueError("Cannot process an empty tuple as input_ids.")
+            # Assume the primary data is the first element; continue unwrapping if it's also a tuple.
+            current_val = current_val[0]
+        
+        if not torch.is_tensor(current_val):
+            raise TypeError(
+                f"Expected input_ids to resolve to a tensor, but got {type(input_ids)} "
+                f"which resolved to {type(current_val)} ({current_val})."
+            )
+        
+        actual_input_tensor = current_val
+
+        # Get embedding from wte (word token embedding)
+        embedding_layer = self.transformer["wte"]
+        hidden_states = embedding_layer(actual_input_tensor)
+        
+        # Apply dropout and layer norm if present
+        if "emb_drop" in self.transformer:
+            hidden_states = self.transformer["emb_drop"](hidden_states)
+        # Based on your model's structure printout, ln_f is applied after embedding/dropout
+        if "ln_f" in self.transformer:
+            hidden_states = self.transformer["ln_f"](hidden_states)
+
+        # Pass through the transformer blocks (encoder layers)
+        for i, block in enumerate(self.transformer["blocks"]):
+            input_to_block_type = type(hidden_states) # For debugging
+            input_to_block_shape = hidden_states.shape if torch.is_tensor(hidden_states) else "N/A" # For debugging
+
+            result = block(hidden_states)
+
+            if isinstance(result, tuple):
+                if not result: # Check for an empty tuple
+                    raise ValueError(f"Transformer block {i} returned an empty tuple.")
+                
+                hidden_states = result[0] # Extract the first element
+
+                # Rigorous check for the extracted hidden_states
+                if not torch.is_tensor(hidden_states):
+                    raise TypeError(
+                        f"After processing block {i}, the first element of the returned tuple "
+                        f"(expected to be hidden_states) is type {type(hidden_states)}, not a Tensor. "
+                        f"The full tuple was: {result}. Input to block was type {input_to_block_type} with shape {input_to_block_shape}."
+                    )
+            else: # If block did not return a tuple
+                hidden_states = result
+                if not torch.is_tensor(hidden_states):
+                    raise TypeError(
+                        f"Transformer block {i} did not return a tuple, and its direct output "
+                        f"is type {type(hidden_states)}, not a Tensor. "
+                        f"Input to block was type {input_to_block_type} with shape {input_to_block_shape}."
+                    )
+                    
+            # Optional: Print shape to verify
+            # print(f"Block {i} output hidden_states shape: {hidden_states.shape}, type: {type(hidden_states)}")
+
+        # Do not apply ff_out (final projection layer), as it's handled by self.lm_head
+        return hidden_states
+
+
 class LLaDaClassifier(nn.Module):
-    """Classification head for LLaDA. Takes a single hidden state and outputs a logit."""
+    """Classification head for LLaDA. Predicts if a token is an EOS token or not."""
     def __init__(self, hidden_size):
         super().__init__()
+        self.hidden_size = hidden_size
         self.classifier = nn.Linear(hidden_size, 1)
-    
+
     def forward(self, hidden_state):
-        # hidden_state: (batch_size, hidden_size)
+        # hidden_states: [B, 1, D]
+
+        # Check if shape is correct
+        assert hidden_state.dim() == 3, f"Expected 3D tensor, got {hidden_state.dim()}D tensor"
+        assert hidden_state.size(0) == 1, f"Expected batch size of 1, got {hidden_state.size(0)}"
+        assert hidden_state.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_state.size(2)}"
+
         return self.classifier(hidden_state).squeeze(-1)
 
 class LLaDaRegressor(nn.Module):
@@ -36,18 +153,32 @@ class LLaDaRegressor(nn.Module):
         super().__init__()
         self.regressor = nn.Linear(hidden_size, 1)
     
-    def forward(self, pooled):
+    def forward(self, hidden_states):
+        # hidden_states: [B, T, D]
+
+        # Check if shape is correct
+        assert hidden_states.dim() == 3, f"Expected 3D tensor, got {hidden_states.dim()}D tensor"
+        assert hidden_states.size(0) == 1, f"Expected batch size of 1, got {hidden_states.size(0)}"
+        assert hidden_states.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_states.size(2)}"
+
+        # pool them with mean
+        pooled = hidden_states.mean(dim=1)  # [B, D]
+
+
         return self.regressor(pooled).squeeze(-1)
 
 class LLaDaFullRegressor(nn.Module):
-    """Regression head for LLaDA using all hidden states"""
-    def __init__(self, hidden_size, context_length):
+    def __init__(self, context_length, hidden_size):
         super().__init__()
+        self.context_length = context_length
+        self.hidden_size = hidden_size
         self.full_regressor = nn.Linear(hidden_size * context_length, 1)
-    
+
     def forward(self, hidden_states):
-        batch_size = hidden_states.size(0)
-        flattened = hidden_states.view(batch_size, -1)
+        batch_size, seq_len, hidden_dim = hidden_states.size()
+        assert seq_len == self.context_length, f"Expected {self.context_length}, got {seq_len}"
+
+        flattened = hidden_states.view(batch_size, -1)  # [B, T*D]
         return self.full_regressor(flattened).squeeze(-1)
 
 class LLaDaTrainer(pl.LightningModule):
