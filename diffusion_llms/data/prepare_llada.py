@@ -18,7 +18,7 @@ from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
 # Import your dataset module
-from diffusion_llms.dataloader.llada_2 import DataModule
+from diffusion_llms.dataloader.llada_dataloader import DataModule
 from diffusion_llms.input_helper import get_config
 
 

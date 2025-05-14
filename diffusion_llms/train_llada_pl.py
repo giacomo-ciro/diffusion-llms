@@ -17,8 +17,8 @@ from transformers import AutoTokenizer, AutoModel
 import hashlib
 
 # Import the embedded data module
-from diffusion_llms.dataloader.llada_from_file import EmbeddedDataModule
 from diffusion_llms.input_helper import get_config
+from diffusion_llms.dataloader.llada_dataloader import DataModule
 torch.set_float32_matmul_precision("medium")
 
 
@@ -190,6 +190,7 @@ class LLaDaTrainer(pl.LightningModule):
         model_type,
         hidden_size,
         context_length,
+        cache_dir="cache",
         learning_rate=1e-5,
         pos_weight=10.0
     ):
@@ -202,6 +203,7 @@ class LLaDaTrainer(pl.LightningModule):
         self.context_length = context_length
         self.learning_rate = learning_rate
         self.pos_weight = torch.tensor([pos_weight])
+        self.backbone = LladaBackbone(cache_dir)
         
         if model_type == "classifier":
             self.model = LLaDaClassifier(hidden_size)
@@ -217,9 +219,16 @@ class LLaDaTrainer(pl.LightningModule):
         return self.model(x)
     
     def training_step(self, batch, batch_idx):
+        # get the hidden states
+        # batch in here has input_ids, eos_labels, true_length, dummy attn matrix
+
+        llada_hidden_states = self.backbone(batch["input_ids"])
+        pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
+
+
         # Extract the appropriate data based on model type
         if self.model_type == "classifier":
-            x = batch["last_hidden"]
+            x = llada_hidden_states
             y = batch["eos_labels"].float()
             # Shuffle the indexes
             idx = torch.randperm(x.size(0))
@@ -242,7 +251,7 @@ class LLaDaTrainer(pl.LightningModule):
                 self.log('train/acc', acc, prog_bar=True)
                 
         elif self.model_type == "regressor":
-            x = batch["pooled"]
+            x = pooled_hidden_states
             y = batch["true_length"].float()
             
             # Normalize target to 0-1 range
@@ -260,7 +269,7 @@ class LLaDaTrainer(pl.LightningModule):
                 self.log('train/rmse', rmse, prog_bar=True)
                 
         elif self.model_type == "full_regressor":
-            x = batch["last_hidden"]
+            x = llada_hidden_states
             y = batch["true_length"].float()
             
             # Normalize target to 0-1 range
@@ -281,8 +290,11 @@ class LLaDaTrainer(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         # Extract the appropriate data based on model type
+        llada_hidden_states = self.backbone(batch["input_ids"])
+        pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
+
         if self.model_type == "classifier":
-            x = batch["last_hidden"]
+            x = llada_hidden_states
             y = batch["eos_labels"].float()
             
             logits = self.model(x)
@@ -314,7 +326,7 @@ class LLaDaTrainer(pl.LightningModule):
                     pass
                 
         elif self.model_type == "regressor":
-            x = batch["pooled"]
+            x = pooled_hidden_states
             y = batch["true_length"].float()
             
             # Normalize target to 0-1 range
@@ -332,7 +344,7 @@ class LLaDaTrainer(pl.LightningModule):
                 self.log('val/rmse', rmse, prog_bar=True)
                 
         elif self.model_type == "full_regressor":
-            x = batch["last_hidden"]
+            x = llada_hidden_states
             y = batch["true_length"].float()
             
             # Normalize target to 0-1 range
@@ -362,13 +374,12 @@ class LLaDaTrainer(pl.LightningModule):
 
 def main():
     args = get_config()    
-    # Create output directory
-    os.makedirs(args["output_dir"], exist_ok=True)
-    
+    print("Configuration loaded successfully.")
+    print("args:", args)
     # Create config for data module
     
     # Create data module
-    data_module = EmbeddedDataModule(
+    data_module = DataModule(
         args, 
         args["embedding_dir"], 
         num_workers=args["num_workers"]
@@ -422,8 +433,6 @@ def main():
         log_every_n_steps=10
     )
 
-    
-    
     # Train model
     trainer.fit(model, 
                 data_module.train_dataloader(), 

@@ -64,7 +64,7 @@ class LengthPredictDataset(pl.LightningDataModule):
         }
 
 
-class DataModule:
+class DataModule(pl.LightningDataModule):
     """
     The main datamodule. When iterated over, returns batches of (X, y, msk) of sequence and target sequence shifted by one.
     """

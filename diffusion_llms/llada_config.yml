@@ -9,9 +9,10 @@ model:
 
 # Data configuration
 data:
-  embedding_dir: "/home/3160499/diffusion-llms/embedded_datasets"
+  embedding_dir: "./embedded_datasets"
   num_workers: 1
   val_test_perc: 0.05
+  cache_dir: "./cache_hidden"
 
 # Training parameters
 training:

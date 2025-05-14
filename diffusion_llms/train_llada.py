@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score, root_mean_squared_error, roc_auc_sco
 from torch.optim import AdamW
 from transformers import AutoModel, AutoTokenizer
 
-from diffusion_llms.dataloader.llada_2 import DataModule 
+from diffusion_llms.dataloader.llada_dataloader import DataModule 
 
 
 from diffusion_llms.input_helper import get_config
