@@ -174,7 +174,12 @@ class LLaDaFullRegressor(nn.Module):
         super().__init__()
         self.context_length = context_length
         self.hidden_size = hidden_size
-        self.full_regressor = nn.Linear(hidden_size * context_length, 1)
+        self.full_regressor = nn.Sequential(
+            nn.Linear(hidden_size * context_length, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size * context_length, 1),
+            nn.ReLU(),
+        )
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.size()
@@ -278,14 +283,14 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
-            loss = F.mse_loss(preds, y_normalized)
+            loss = F.mse_loss(torch.exp(preds), y_normalized)
             
             # Log metrics
             self.log('train/loss', loss, prog_bar=True)
             
             # Calculate RMSE in original scale
             with torch.no_grad():
-                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                rmse = torch.sqrt(F.mse_loss(torch.exp(preds) * self.context_length, y))
                 self.log('train/rmse', rmse, prog_bar=True)
         
         return loss
@@ -353,14 +358,14 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
-            loss = F.mse_loss(preds, y_normalized)
+            loss = F.mse_loss(torch.exp(preds), y_normalized)
             
             # Log metrics
             self.log('val/loss', loss, prog_bar=True)
             
             # Calculate RMSE in original scale
             with torch.no_grad():
-                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                rmse = torch.sqrt(F.mse_loss(torch.exp(preds) * self.context_length, y))
                 self.log('val/rmse', rmse, prog_bar=True)
         
         return {'val_loss': loss}
@@ -387,7 +392,7 @@ class LLaDaTrainer(pl.LightningModule):
                 # Save as attribute for later use in test_epoch_end
                 if not hasattr(self, "test_logits"):
                     self.test_logits = []
-                self.test_logits.append(logits.detach().cpu())
+                self.test_logits.append(logits.detach().cpu().flatten())
                 # Save input_ids for reference (optional)
             return {'test_loss': loss}
         elif self.model_type == "regressor":
@@ -403,7 +408,7 @@ class LLaDaTrainer(pl.LightningModule):
                 if not hasattr(self, "regression_preds"):
                     self.regression_preds = []
 
-                self.regression_preds.append(preds.detach().cpu() * self.context_length)
+                self.regression_preds.append(preds.detach().cpu().flatten() * self.context_length)
 
             return {'test_loss': loss}
         elif self.model_type == "full_regressor":
@@ -411,6 +416,7 @@ class LLaDaTrainer(pl.LightningModule):
             y = batch["true_length"].float()
             y_normalized = y / self.context_length
             preds = self.model(x)
+            preds = torch.exp(preds)
             loss = F.mse_loss(preds, y_normalized)
             self.log('test/loss', loss, prog_bar=True)
             with torch.no_grad():
@@ -420,7 +426,7 @@ class LLaDaTrainer(pl.LightningModule):
                 if not hasattr(self, "regression_preds"):
                     self.regression_preds = []
 
-                self.regression_preds.append(preds.detach().cpu() * self.context_length)
+                self.regression_preds.append(preds.detach().cpu().flatten() * self.context_length)
 
             return {'test_loss': loss}
 
