@@ -158,7 +158,12 @@ class LLaDaRegressor(nn.Module):
     def __init__(self, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
-        self.regressor = nn.Linear(hidden_size, 1)
+        self.regressor = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size//2),
+            nn.ReLU(),
+            nn.Linear(hidden_size//2, 1),
+            nn.ReLU(),
+        )
     
     def forward(self, polled_hidden_states):
         # hidden_states: [B, D]
@@ -266,6 +271,7 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
+            preds = torch.exp(preds)
             loss = F.mse_loss(preds, y_normalized)
             
             # Log metrics
@@ -341,6 +347,7 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
+            preds = torch.exp(preds)
             loss = F.mse_loss(preds, y_normalized)
             
             # Log metrics
@@ -401,6 +408,7 @@ class LLaDaTrainer(pl.LightningModule):
             y = batch["true_length"].float()
             y_normalized = y / self.context_length
             preds = self.model(x)
+            preds = torch.exp(preds)
             loss = F.mse_loss(preds, y_normalized)
             self.log('test/loss', loss, prog_bar=True)
             with torch.no_grad():
