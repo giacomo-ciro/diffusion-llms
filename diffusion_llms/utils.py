@@ -62,7 +62,6 @@ def get_causal_mask(
     expanded_mask = attn_mask[None, None, :, :].expand(B, 1, context_length, context_length)
     return expanded_mask
 
-
 def check_config_validity(config:dict):  
     """
     Performs comprehensive validation of configuration parameters used throughout the project.
@@ -243,13 +242,10 @@ def check_config_validity(config:dict):
             if attribute in config and not isinstance(config[attribute], expected_type):
                 message += f"'{attribute}' must be {expected_type_name}" + "\n"
     
-    # Print errors and exit if necessary
     if message:
         print(f"[!] Error in config.json:\n{message}")
-        sys.exit()
-    
+        #sys.exit()
     print("The provided configuration file is valid!")
-
 
 def crop_to_var_len(model: Any, eos_token_id: int, x: torch.Tensor, attention_mask: torch.Tensor, pad_token_id: int = None) -> torch.Tensor:
     """
@@ -283,8 +279,6 @@ def crop_to_var_len(model: Any, eos_token_id: int, x: torch.Tensor, attention_ma
     x[left_eos_mask] = pad_token_id or eos_token_id
 
     return x # [B, max_length]
-
-
 
 def get_device():
     """Get the device to use for PyTorch operations (CPU or cuda or MPS)."""

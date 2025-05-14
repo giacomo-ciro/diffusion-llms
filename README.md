@@ -73,7 +73,7 @@ This work represents a significant step toward more efficient and practical diff
     - otherwise, we mask and unmask tokens until model predicts where the eos token is
     - observation: if the model is able to predict some mask tokens, it is likely to predict the eos token as well
 - [x] Define a method to evaluate our specific task, e.g., how to measure the performance of the model in predicting the eos token at the first step of the diffusion process (accuracy / metrics / as function of numbe of unmasked tokens etc).
-- [ ] Complete `check_config_validity` in `utils.py`
+- ~~[x] Complete `check_config_validity` in `utils.py`~~
 
 ### Experiments
 
