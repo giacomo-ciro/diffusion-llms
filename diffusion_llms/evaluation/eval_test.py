@@ -30,14 +30,15 @@ from transformers import AutoTokenizer
 import evaluate
 
 # Add parent directory to path to import model
-sys.path.append("../")
-sys.path.append("../../")
-# Fix import path since we're already in the diffusion_llms package
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# Import model
 try:
-    from model import GPT2  # Try direct import first
+    from diffusion_llms.model import GPT2
 except ImportError:
     try:
-        from diffusion_llms.model import GPT2  # Try with package prefix
+        from model import GPT2
     except ImportError:
         print("Error: Cannot import GPT2 model. Check your import paths.")
         sys.exit(1)
@@ -60,7 +61,7 @@ def get_device():
         print("Using CPU")
     return device
 
-def load_model_and_tokenizer(config_path):
+def load_model_and_tokenizer(config_path, checkpoint_path=None):
     """Load the model and tokenizer based on config file."""
     # Load config
     with open(config_path, 'r') as f:
@@ -79,7 +80,10 @@ def load_model_and_tokenizer(config_path):
     device = get_device()
     
     # Instantiate model
-    if os.path.exists(config["init_from"]):
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        print(f"Loading model from checkpoint: {checkpoint_path}")
+        model = GPT2.load_from_checkpoint(checkpoint_path)
+    elif os.path.exists(config["init_from"]):
         print(f"Loading pre-trained model from: {config['init_from']}")
         model = GPT2.from_pretrained(config["init_from"])
     else:
@@ -117,28 +121,31 @@ def generate_text(model, tokenizer, prompt, config, max_new_tokens=None, tempera
     start_time = time.time()
     try:
         if pipeline == "diffusion":
+            # Use the main generate method with diffusion pipeline
             outputs = model.generate(
                 input_ids=input_ids,
-                pipeline=pipeline,
+                pipeline="diffusion",
                 max_new_tokens=max_new,
                 temperature=temp,
                 top_k=top_k,
                 denoising_strategy=denoising_strategy,
                 diffusion_steps=diffusion_steps,
-                var_len=False
+                var_len=False  # This parameter is required by the model
             )
             # Take the last output from diffusion steps
             output_ids = outputs[-1][0]
         else:  # arm pipeline
+            # Use the main generate method with arm pipeline
             outputs = model.generate(
                 input_ids=input_ids,
-                pipeline=pipeline,
+                pipeline="arm",
                 max_new_tokens=max_new,
                 temperature=temp,
                 top_k=top_k,
-                do_sample=do_sample,
-                repetition_penalty=repetition_penalty
+                do_sample=True,
+                repetition_penalty=1.0
             )
+            output_ids = outputs[0][0]  # First batch, first sequence
             output_ids = outputs[0][0]
         
         # Decode the generated text
@@ -271,7 +278,9 @@ def evaluate_gsm8k(model, tokenizer_tiktoken, config, num_samples=10, debug=Fals
     try:
         # Load dataset
         ds = load_dataset("gsm8k", "main")
-        samples = ds["test"][:num_samples]
+        # GSM8K dataset has integer indices, ensure we're using them properly
+        test_indices = list(range(min(num_samples, len(ds["test"]))))
+        samples = [ds["test"][i] for i in test_indices]
         
         correct = 0
         total = 0
@@ -657,14 +666,26 @@ def main():
     parser.add_argument("--samples", type=int, default=10, help="Number of samples to evaluate per task")
     parser.add_argument("--output", type=str, default=None, help="Output file to save results")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument("--max-new-tokens", type=int, default=None, 
+                        help="Maximum number of new tokens to generate (default: from config or 256)")
+    parser.add_argument("--temperature", type=float, default=None,
+                        help="Temperature for generation (default: from config or 0.7)")
+    parser.add_argument("--checkpoint", type=str, default=None,
+                        help="Path to specific model checkpoint (overrides config's init_from)")
     
     args = parser.parse_args()
     
     # Load model and tokenizer
-    model, tokenizer_tiktoken, tokenizer_hf, config, device = load_model_and_tokenizer(args.config)
+    model, tokenizer_tiktoken, tokenizer_hf, config, device = load_model_and_tokenizer(args.config, args.checkpoint)
     
     # Dictionary to store all results
     all_results = {}
+    
+    # Update config with command-line parameters if provided
+    if args.max_new_tokens:
+        config["max_new_tokens"] = args.max_new_tokens
+    if args.temperature is not None:
+        config["temperature"] = args.temperature
     
     # Evaluate on selected tasks
     for task in args.tasks:
