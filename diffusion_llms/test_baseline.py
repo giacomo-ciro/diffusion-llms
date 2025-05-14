@@ -13,7 +13,7 @@ def step_zero(
     masked_prompt: torch.Tensor, # shape (B, L)
     *,
     mask_id: int = 126336,       # the id you use for [MASK]
-    eos_token_id: int = 2,       # model‑specific <eos>
+    eos_token_id: int = 126081,       # model‑specific <eos>
     percentiles: list = [0.90],    # e.g. 0.90 → top‑10 % highest probs
     use_probs: bool = True       # set False if you really want raw logits
 ) -> torch.LongTensor:
