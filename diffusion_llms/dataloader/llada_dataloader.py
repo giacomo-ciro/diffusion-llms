@@ -5,13 +5,13 @@ from typing import List, Tuple
 import os
 import pytorch_lightning as pl
 
-class LengthPredictDataset(pl.LightningDataModule):
+class LengthPredictDataset(Dataset):
     def __init__(
         self,
         tokenizer,
         prompts,
         responses,
-        max_length=4096,
+        max_length,
         mask_id=126336
     ):
         self.tokenizer = tokenizer

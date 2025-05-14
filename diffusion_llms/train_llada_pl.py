@@ -26,8 +26,11 @@ class LladaBackbone(pl.LightningModule):
     def __init__(self, cache_dir="cache", use_mean_pooling=True):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
-        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
+        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
+        # The transformer model
         self.transformer = base_model.model.transformer
+
+        # The head
         self.lm_head = self.transformer.pop("ff_out")
 
         self.cache_dir = cache_dir
@@ -142,7 +145,6 @@ class LLaDaClassifier(nn.Module):
 
         # Check if shape is correct
         assert hidden_state.dim() == 3, f"Expected 3D tensor, got {hidden_state.dim()}D tensor"
-        assert hidden_state.size(0) == 1, f"Expected batch size of 1, got {hidden_state.size(0)}"
         assert hidden_state.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_state.size(2)}"
 
         return self.classifier(hidden_state).squeeze(-1)
@@ -158,7 +160,6 @@ class LLaDaRegressor(nn.Module):
 
         # Check if shape is correct
         assert hidden_states.dim() == 3, f"Expected 3D tensor, got {hidden_states.dim()}D tensor"
-        assert hidden_states.size(0) == 1, f"Expected batch size of 1, got {hidden_states.size(0)}"
         assert hidden_states.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_states.size(2)}"
 
         # pool them with mean
@@ -381,7 +382,7 @@ def main():
     # Create data module
     data_module = DataModule(
         args, 
-        args["embedding_dir"], 
+        tokenizer=AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct"),
         num_workers=args["num_workers"]
     )
     data_module.setup()
