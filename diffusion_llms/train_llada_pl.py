@@ -367,7 +367,6 @@ class LLaDaTrainer(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         # Same as validation step, but for classifier, save logits and ids for CSV
-        idx = batch["idx"]
         llada_hidden_states = self.backbone(batch["input_ids"]).detach()
         pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
 
