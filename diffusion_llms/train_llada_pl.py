@@ -19,6 +19,7 @@ import hashlib
 # Import the embedded data module
 from diffusion_llms.input_helper import get_config
 from diffusion_llms.dataloader.llada_dataloader import DataModule
+import numpy as np
 torch.set_float32_matmul_precision("medium")
 
 
@@ -156,20 +157,17 @@ class LLaDaRegressor(nn.Module):
     """Regression head for LLaDA using pooled output"""
     def __init__(self, hidden_size):
         super().__init__()
+        self.hidden_size = hidden_size
         self.regressor = nn.Linear(hidden_size, 1)
     
-    def forward(self, hidden_states):
-        # hidden_states: [B, T, D]
+    def forward(self, polled_hidden_states):
+        # hidden_states: [B, D]
 
         # Check if shape is correct
-        assert hidden_states.dim() == 3, f"Expected 3D tensor, got {hidden_states.dim()}D tensor"
-        assert hidden_states.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_states.size(2)}"
+        assert polled_hidden_states.dim() == 2, f"Expected 3D tensor, got {polled_hidden_states.dim()}D tensor"
+        assert polled_hidden_states.size(1) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {polled_hidden_states.size(2)}"
 
-        # pool them with mean
-        pooled = hidden_states.mean(dim=1)  # [B, D]
-
-
-        return self.regressor(pooled).squeeze(-1)
+        return self.regressor(polled_hidden_states).squeeze(-1)
 
 class LLaDaFullRegressor(nn.Module):
     def __init__(self, context_length, hidden_size):
@@ -214,7 +212,7 @@ class LLaDaTrainer(pl.LightningModule):
         elif model_type == "regressor":
             self.model = LLaDaRegressor(hidden_size)
         elif model_type == "full_regressor":
-            self.model = LLaDaFullRegressor(hidden_size, context_length)
+            self.model = LLaDaFullRegressor(context_length, hidden_size)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
     
@@ -368,8 +366,78 @@ class LLaDaTrainer(pl.LightningModule):
         return {'val_loss': loss}
     
     def test_step(self, batch, batch_idx):
-        # Same as validation step
-        return self.validation_step(batch, batch_idx)
+        # Same as validation step, but for classifier, save logits and ids for CSV
+        idx = batch["idx"]
+        llada_hidden_states = self.backbone(batch["input_ids"]).detach()
+        pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
+
+        if self.model_type == "classifier":
+            x = llada_hidden_states
+            y = batch["eos_labels"].float()
+            logits = self.model(x)
+            loss = F.binary_cross_entropy_with_logits(
+                logits, y, 
+                pos_weight=self.pos_weight.to(y.device)
+            )
+            self.log('test/loss', loss, prog_bar=True)
+            with torch.no_grad():
+                pred_labels = (torch.sigmoid(logits) > 0.5).float()
+                acc = (pred_labels == y).float().mean()
+                self.log('test/acc', acc, prog_bar=True)
+                # Save logits, labels, and optionally input ids for CSV
+                # Save as attribute for later use in test_epoch_end
+                if not hasattr(self, "test_logits"):
+                    self.test_logits = []
+                self.test_logits.append(logits.detach().cpu())
+                # Save input_ids for reference (optional)
+            return {'test_loss': loss}
+        elif self.model_type == "regressor":
+            x = pooled_hidden_states
+            y = batch["true_length"].float()
+            y_normalized = y / self.context_length
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            self.log('test/loss', loss, prog_bar=True)
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('test/rmse', rmse, prog_bar=True)
+                if not hasattr(self, "regression_preds"):
+                    self.regression_preds = []
+
+                self.regression_preds.append(preds.detach().cpu() * self.context_length)
+
+            return {'test_loss': loss}
+        elif self.model_type == "full_regressor":
+            x = llada_hidden_states
+            y = batch["true_length"].float()
+            y_normalized = y / self.context_length
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            self.log('test/loss', loss, prog_bar=True)
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('test/rmse', rmse, prog_bar=True)
+
+                if not hasattr(self, "regression_preds"):
+                    self.regression_preds = []
+
+                self.regression_preds.append(preds.detach().cpu() * self.context_length)
+
+            return {'test_loss': loss}
+
+    def on_test_epoch_end(self):
+        # For classifier, save logits and labels to CSV
+        if self.model_type == "classifier" and hasattr(self, "test_logits"):
+            logits_np = torch.cat(self.test_logits, dim=0).numpy()
+            np.save(os.path.join(self.logger.save_dir, "test_logits.npy"), logits_np)
+
+        elif self.model_type == "regressor" and hasattr(self, "regression_preds"):
+            preds_np = torch.cat(self.regression_preds, dim=0).numpy()
+            np.save(os.path.join(self.logger.save_dir, "regression_preds_pooled.npy"), preds_np)
+        
+        elif self.model_type == "full_regressor" and hasattr(self, "regression_preds"):
+            preds_np = torch.cat(self.regression_preds, dim=0).numpy()
+            np.save(os.path.join(self.logger.save_dir, "regression_preds_full.npy"), preds_np)
     
     def configure_optimizers(self):
         """Configure optimizer for the model"""

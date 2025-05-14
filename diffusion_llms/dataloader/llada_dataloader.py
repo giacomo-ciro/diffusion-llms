@@ -95,7 +95,7 @@ class DataModule(pl.LightningDataModule):
         path_to_train = os.path.join(path_to_data, "train.csv")
         path_to_test = os.path.join(path_to_data, "test.csv")
         train_df = pd.read_csv(path_to_train)
-        test_df = pd.read_csv(path_to_test)
+        test_df = pd.read_csv(path_to_test).dropna(subset=["model_response"])
 
         # Prepare datasets
         train_prompts = train_df["user_prompt"].tolist()
