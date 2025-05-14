@@ -9,6 +9,7 @@ __pycache__
 *.pt
 diffusion-llms/data/*/
 !diffusion-llms/data/recipe/
+*.pth
 
 *.ckpt
 .DS_Store

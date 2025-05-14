@@ -375,6 +375,16 @@ class LLaDaTrainer(pl.LightningModule):
         """Configure optimizer for the model"""
         return torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate)
 
+    def on_save_checkpoint(self, checkpoint: dict) -> None:
+        # keep only keys under "model" (i.e. your classifier/regressor head)
+        state_dict = checkpoint["state_dict"]
+        filtered = {
+            k: v
+            for k, v in state_dict.items()
+            if k.startswith("model.")
+        }
+        checkpoint["state_dict"] = filtered
+
 
 def main():
     args = get_config()    
