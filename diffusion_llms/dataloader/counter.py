@@ -96,7 +96,7 @@ def main():
         sys.exit(1)
     
     total_count = count_tokens_in_dataset(config_path)
-    print("\nToken counting completed successfully.")
+    print(f"\nToken counting completed successfully: {total_count}")
 
 
 if __name__ == "__main__":
