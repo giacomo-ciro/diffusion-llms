@@ -60,6 +60,22 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 	- [ ]	Length generalization tests: Evaluate models trained on shorter sequences against significantly longer test sequences.
 	- [ ]	Domain generalization tests???
 
+### Sync 14/05/25
+
+5 methods for evaluation
+1. logit (baseline)
+2. concat regression (vitto)
+3. average regression (vitto)
+4. classification (luca)
+5. distilbert (vitto)
+
+after training them, we can evaluate them on the test set.
+
+#### TODO
+- [ ] Implement the 5 methods for evaluation
+- [ ] remove unnecessary code from the repo
+- [ ] add table to the report - how good are the models at predicting the eos token?
+- [ ] generate with 25 - 50 - 75% of the tokens masked : 5 
 
 ### Feedback from Professor
 - ambition is good, doability is the question
