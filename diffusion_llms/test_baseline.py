@@ -74,6 +74,8 @@ def main():
     )
     data_module.setup()
     model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
+    model.to("cuda")
+    model.eval()
     
     positions = []
     for glob_idx, batch in enumerate(tqdm(data_module.test_dataloader(), desc="Batches")):
