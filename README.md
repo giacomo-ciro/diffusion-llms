@@ -310,32 +310,68 @@ $ python -m pip install --upgrade datasets huggingface-hub fsspec
 ## Repository Structure
 ```bash
 ├── diffusion_llms/ 
-│   ├── configs/
-│   ├── data/
-│       ├── prepare.py      
+│   ├── baseline/           # EOS prediction baseline implementations
+│       ├── datamodule.py   # Data loading utilities
+│       ├── model_baseline.py  # DistilBERT-based models for length prediction
+│       ├── sample_DiffuGPT.py # Generation script for DiffuGPT models
+│       ├── train_DistilBERT_DGPT_clas.ipynb  # Classification-based EOS prediction
+│       ├── train_DistilBERT_DGPT_reg.ipynb   # Regression-based length prediction 
+│       ├── train_DistilBERT_LLaDa_clas.ipynb # LLaDa classification training
+│       └── train_DistilBERT_LLaDa_reg.ipynb  # LLaDa regression training
+│   ├── configs/            # Configuration files for different model variants
+│       ├── diffugpt-base.json     
+│       ├── diffugpt-eoseos.json   
+│       ├── diffugpt-eoshead.json  
+│       ├── diffugpt-eospad.json   
+│       ├── eval_config.json      
+│       └── finetune_config.json   
+│   ├── data/               # Data preparation and processing
+│       ├── prepare.py    
 │       ├── prepare_var_len.py 
-│       ├── train.csv
-│       └── etc.
-│   ├── dataloader/
-│       ├── llada_datamodule.py
-│   ├── evaluation/    
-│       ├── eval.py
-│       └── etc.     
-│   ├── models/
-│   ├── tokenizers/
+│       ├── prepare_llada.py  
+│       ├── train.csv      
+│       └── test.csv        
+│   ├── dataloader/         
+│       ├── llada_datamodule.py  
+│       ├── llada_from_file.py   
+│       └── llada_2.py     
+│   ├── evaluation/         
+│       ├── eval.py         # General evaluation framework
+│       ├── eval_eos.py     
+│       ├── eval_eospad.py  
+│       ├── eval_test.py    # Comprehensive benchmark testing
+│       └── utils.py    
+│   ├── models/           
+│       ├── gpt2_diffusion.py     # DiffuGPT implementation
+│       ├── gpt2_arm.py           # Autoregressive GPT-2 implementation
+│       ├── llada.py              # LLaDa model implementation
+│       ├── llada_binary_head.py  # LLaDa with binary classification head
+│       ├── diffugpt2_length_head.py  # DiffuGPT with length prediction
+│       └── diffugpt2_reg_head.py  # DiffuGPT with regression head
+│   ├── tokenizers/       
+│       ├── custom_gpt_w_pad.py  # GPT-2 tokenizer with padding support
+│       └── __init__.py
 │   ├── __init__.py       
-│   ├── attention_patch.py
+│   ├── attention_patch.py  # Patch for attention mechanism 
 │   ├── config.json         # Default configuration file
-│   ├── datamodule.py       # Data loading utilities using PyTorch Lightning
-│   ├── main.ipynb          # only for testing, ignore
+│   ├── datamodule.py       # Data loading utilities
 │   ├── model.py            # PyTorch Lightning wrapper for GPT-2
 │   ├── sample.py           # Text generation script
-│   ├── train.py            # Main training script
+│   ├── train.py           
+│   ├── train_llada.py    
+│   ├── train_llada_pl.py   
 │   └── utils.py            
-├── .gitignore
+├── notebooks/             
+│   ├── eos_logit_exploration.ipynb  
+│   ├── eos_insights.py   
+│   └── eos_curve.py      
+├── outputs/                
+│   ├── random_eos.png     
+│   ├── trigger_eos.png    
+│   └── multilingual_eos/   
 ├── LICENSE
 ├── README.md
-└── requirements.txt
+└── requirements.txt 
 ```
 
 ## References
