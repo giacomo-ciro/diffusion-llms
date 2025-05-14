@@ -19,6 +19,7 @@ import hashlib
 # Import the embedded data module
 from diffusion_llms.input_helper import get_config
 from diffusion_llms.dataloader.llada_dataloader import DataModule
+import numpy as np
 torch.set_float32_matmul_precision("medium")
 
 
@@ -368,8 +369,78 @@ class LLaDaTrainer(pl.LightningModule):
         return {'val_loss': loss}
     
     def test_step(self, batch, batch_idx):
-        # Same as validation step
-        return self.validation_step(batch, batch_idx)
+        # Same as validation step, but for classifier, save logits and ids for CSV
+        idx = batch["idx"]
+        llada_hidden_states = self.backbone(batch["input_ids"]).detach()
+        pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
+
+        if self.model_type == "classifier":
+            x = llada_hidden_states
+            y = batch["eos_labels"].float()
+            logits = self.model(x)
+            loss = F.binary_cross_entropy_with_logits(
+                logits, y, 
+                pos_weight=self.pos_weight.to(y.device)
+            )
+            self.log('test/loss', loss, prog_bar=True)
+            with torch.no_grad():
+                pred_labels = (torch.sigmoid(logits) > 0.5).float()
+                acc = (pred_labels == y).float().mean()
+                self.log('test/acc', acc, prog_bar=True)
+                # Save logits, labels, and optionally input ids for CSV
+                # Save as attribute for later use in test_epoch_end
+                if not hasattr(self, "test_logits"):
+                    self.test_logits = []
+                self.test_logits.append(logits.detach().cpu())
+                # Save input_ids for reference (optional)
+            return {'test_loss': loss}
+        elif self.model_type == "regressor":
+            x = pooled_hidden_states
+            y = batch["true_length"].float()
+            y_normalized = y / self.context_length
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            self.log('test/loss', loss, prog_bar=True)
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('test/rmse', rmse, prog_bar=True)
+                if not hasattr(self, "regression_preds"):
+                    self.regression_preds = []
+
+                self.regression_preds.append(preds.detach().cpu() * self.context_length)
+
+            return {'test_loss': loss}
+        elif self.model_type == "full_regressor":
+            x = llada_hidden_states
+            y = batch["true_length"].float()
+            y_normalized = y / self.context_length
+            preds = self.model(x)
+            loss = F.mse_loss(preds, y_normalized)
+            self.log('test/loss', loss, prog_bar=True)
+            with torch.no_grad():
+                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
+                self.log('test/rmse', rmse, prog_bar=True)
+
+                if not hasattr(self, "regression_preds"):
+                    self.regression_preds = []
+
+                self.regression_preds.append(preds.detach().cpu() * self.context_length)
+
+            return {'test_loss': loss}
+
+    def on_test_epoch_end(self):
+        # For classifier, save logits and labels to CSV
+        if self.model_type == "classifier" and hasattr(self, "test_logits"):
+            logits_np = torch.cat(self.test_logits, dim=0).numpy()
+            np.save(os.path.join(self.logger.save_dir, "test_logits.npy"), logits_np)
+
+        elif self.model_type == "regressor" and hasattr(self, "regression_preds"):
+            preds_np = torch.cat(self.regression_preds, dim=0).numpy()
+            np.save(os.path.join(self.logger.save_dir, "regression_preds_pooled.npy"), preds_np)
+        
+        elif self.model_type == "full_regressor" and hasattr(self, "regression_preds"):
+            preds_np = torch.cat(self.regression_preds, dim=0).numpy()
+            np.save(os.path.join(self.logger.save_dir, "regression_preds_full.npy"), preds_np)
     
     def configure_optimizers(self):
         """Configure optimizer for the model"""
