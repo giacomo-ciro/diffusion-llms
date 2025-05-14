@@ -1,7 +1,7 @@
 from diffusion_llms.train_llada_pl import LladaBackbone
 from diffusion_llms.dataloader.llada_dataloader import DataModule
 from diffusion_llms.input_helper import get_config
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModel
 import torch 
 import numpy as np
 import os
@@ -71,7 +71,8 @@ def main():
         num_workers=args["num_workers"]
     )
     data_module.setup()
-    model = LladaBackbone()
+    model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
+    
     positions = []
     for glob_idx, batch in enumerate(data_module.test_dataloader()):
         input_ids = batch["input_ids"]
