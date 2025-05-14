@@ -223,7 +223,7 @@ class LLaDaTrainer(pl.LightningModule):
         # get the hidden states
         # batch in here has input_ids, eos_labels, true_length, dummy attn matrix
 
-        llada_hidden_states = self.backbone(batch["input_ids"])
+        llada_hidden_states = self.backbone(batch["input_ids"]).detach()
         pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
 
 
@@ -291,7 +291,7 @@ class LLaDaTrainer(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         # Extract the appropriate data based on model type
-        llada_hidden_states = self.backbone(batch["input_ids"])
+        llada_hidden_states = self.backbone(batch["input_ids"]).detach()
         pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
 
         if self.model_type == "classifier":
