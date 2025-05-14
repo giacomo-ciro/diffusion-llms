@@ -56,13 +56,36 @@ def main():
         for response in df.model_response.dropna()
     ]
     print(f"Evaluating {len(gt)} test instances...")
-
+    print(tokenizer.encode(df.loc[2, :].model_response))
+    exit()
     # Get list of pred files
     # all the .npy's in this folder
     paths_to_pred = [fp for fp in os.listdir(".") if fp.endswith(".npy")]
     
     # Open the files and store in a dict
     preds = {p.split(".")[0]:np.load(p) for p in paths_to_pred}
+
+    # Add baselines
+    preds["random"] = np.random.randint(
+        low = 0,
+        high = np.max(gt),
+        size=(len(gt),)
+    )
+    mean_ = np.mean(gt).round().item()
+    preds[f"mean_{mean_}"] = np.full(
+        shape=(len(gt),),
+        fill_value=mean_
+    )
+    min_ = np.min(gt).item()
+    preds[f"min_{min_}"] = np.full(
+        shape=(len(gt),),
+        fill_value=min_
+    )
+    max_ = np.max(gt).item()
+    preds[f"max_{max_}"] = np.full(
+        shape=(len(gt),),
+        fill_value=max_
+    )
     
     # Sanity check
     for model in preds.keys():
@@ -112,7 +135,7 @@ def main():
             "Below",
             "Above",
             "Exact",
-            "Below_avg"
+            "Below_avg",
             "Above_avg"
         ]
     )
@@ -127,6 +150,14 @@ def main():
             ans_df.loc[i, k.capitalize()] = len(ans[model][k]) 
             if k != "exact":
                 ans_df.loc[i, f"{k.capitalize()}_avg"] = np.mean(ans[model][k]).item()
+
+        # Compute mse
+        ans_df.loc[i, "MSE"] = np.mean(
+            np.power(
+                ans[model]["above"] + ans[model]["below"] + ans[model]["exact"],
+                2
+            )
+        ).item()
 
     # Print the result
     print(ans_df.to_string())
