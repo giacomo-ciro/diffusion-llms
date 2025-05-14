@@ -10,7 +10,7 @@ model:
 # Data configuration
 data:
   embedding_dir: "./embedded_datasets"
-  num_workers: 1
+  num_workers: 2
   val_test_perc: 0.05
   cache_dir: "./cache_hidden"
 

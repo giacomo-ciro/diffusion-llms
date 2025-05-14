@@ -26,8 +26,11 @@ class LladaBackbone(pl.LightningModule):
     def __init__(self, cache_dir="cache", use_mean_pooling=True):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
-        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
+        base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
+        # The transformer model
         self.transformer = base_model.model.transformer
+
+        # The head
         self.lm_head = self.transformer.pop("ff_out")
 
         self.cache_dir = cache_dir
@@ -381,7 +384,7 @@ def main():
     # Create data module
     data_module = DataModule(
         args, 
-        args["embedding_dir"], 
+        tokenizer=AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct"),
         num_workers=args["num_workers"]
     )
     data_module.setup()
