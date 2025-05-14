@@ -23,7 +23,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 class LladaBackbone(pl.LightningModule):
-    def __init__(self, cache_dir="cache", use_mean_pooling=True):
+    def __init__(self, cache_dir="cache"):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
         base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
@@ -35,7 +35,10 @@ class LladaBackbone(pl.LightningModule):
 
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.use_mean_pooling = use_mean_pooling
+
+        # Freeze all parameters
+        for param in self.transformer.parameters():
+            param.requires_grad = False
 
     def _get_cache_path(self, input_ids: torch.Tensor) -> str:
         # Hash input ids
