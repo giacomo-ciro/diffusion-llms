@@ -23,7 +23,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 class LladaBackbone(pl.LightningModule):
-    def __init__(self, cache_dir="cache", use_mean_pooling=True):
+    def __init__(self, cache_dir="cache"):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct")
         base_model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
@@ -35,7 +35,10 @@ class LladaBackbone(pl.LightningModule):
 
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.use_mean_pooling = use_mean_pooling
+
+        # Freeze all parameters
+        for param in self.transformer.parameters():
+            param.requires_grad = False
 
     def _get_cache_path(self, input_ids: torch.Tensor) -> str:
         # Hash input ids
@@ -223,7 +226,7 @@ class LLaDaTrainer(pl.LightningModule):
         # get the hidden states
         # batch in here has input_ids, eos_labels, true_length, dummy attn matrix
 
-        llada_hidden_states = self.backbone(batch["input_ids"])
+        llada_hidden_states = self.backbone(batch["input_ids"]).detach()
         pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
 
 
@@ -291,7 +294,7 @@ class LLaDaTrainer(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         # Extract the appropriate data based on model type
-        llada_hidden_states = self.backbone(batch["input_ids"])
+        llada_hidden_states = self.backbone(batch["input_ids"]).detach()
         pooled_hidden_states = llada_hidden_states.mean(dim=1)  # [B, D]
 
         if self.model_type == "classifier":
