@@ -348,7 +348,7 @@ class LLaDaTrainer(pl.LightningModule):
             y_normalized = y / self.context_length
             
             preds = self.model(x)
-            preds = torch.exp(preds)
+            #preds = torch.exp(preds)
             loss = F.mse_loss(preds, y_normalized)
             
             # Log metrics
@@ -466,7 +466,7 @@ class LLaDaTrainer(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.learning_rate,
-            total_steps=self.trainer.estimated_stepping_batches
+            total_steps=self.trainer.estimated_stepping_batches,
         )
         
         return {

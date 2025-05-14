@@ -10,55 +10,86 @@ from tqdm import tqdm
 @torch.no_grad()
 def step_zero(
     model,
-    masked_prompt: torch.Tensor, # shape (B, L)
+    masked_prompt: torch.Tensor,  # shape (B, L)
+    masked_prompt: torch.Tensor,  # shape (B, L)
     *,
     mask_id: int = 126336,       # the id you use for [MASK]
     eos_token_id: int = 126081,       # model‑specific <eos>
     percentiles: list = [0.90],    # e.g. 0.90 → top‑10 % highest probs
     use_probs: bool = True       # set False if you really want raw logits
 ) -> torch.LongTensor:
+    mask_id: int = 126336,        # the id you use for [MASK]
+    eos_token_id: int = 12081,        # model-specific <eos>
+    percentiles: list = [0.5, 0.75, 0.90],  # e.g. [50%, 75%, 90%]
+    use_probs: bool = True        # set False if you really want raw logits
+) -> list[list[torch.Tensor]]:
     """
-    Predict the first position in *each* sequence where the model already thinks
-    an <eos> is highly likely.
-
-    The percentile is computed **only over currently‑masked positions** so the
-    prompt tokens cannot pollute the statistic.
-
+    For each element in the batch, compute the quantile thresholds
+    over the currently-masked positions for each requested percentile.
+    
+    For each element in the batch, compute the quantile thresholds
+    over the currently-masked positions for each requested percentile.
+    
     Returns
     -------
-    first_pos : LongTensor  shape (batch,)
-        One index per batch element.  If no position reaches the threshold the
-        function returns the *first* still‑masked position so generation will
-        at least start there instead of at 0.
+    thresholds : List of length B, each entry is a List of length len(percentiles)
+                 containing the threshold tensor for that percentile.
     """
-    logits = model(masked_prompt).logits              # (B, L, V)
+    # Get (B, L, V)
+    logits = model(masked_prompt).logits
+    thresholds : List of length B, each entry is a List of length len(percentiles)
+                 containing the threshold tensor for that percentile.
+    """
+    # Get (B, L, V)
+    logits = model(masked_prompt).logits
     eos_token_id = getattr(model.config, "eos_token_id", eos_token_id)
 
-    # (B, L) log‑probabilities (or logits) of generating <eos>
+    # (B, L) scores for <eos>
+    # (B, L) scores for <eos>
     if use_probs:
         eos_scores = torch.softmax(logits.float(), dim=-1)[..., eos_token_id]
     else:
         eos_scores = logits[..., eos_token_id].float()
 
     batch_size, seq_len = eos_scores.shape
-    first_pos = torch.zeros(batch_size, dtype=torch.long, device=masked_prompt.device)
+    all_thresholds: list[list[torch.Tensor]] = []
+    all_thresholds: list[list[torch.Tensor]] = []
 
-    thresholds = []
     for b in range(batch_size):
-        mask_positions = (masked_prompt[b] == mask_id)     # which tokens are still masked?
+        # which positions are still masked?
+        mask_positions = masked_prompt[b] == mask_id
+
+        # which positions are still masked?
+        mask_positions = masked_prompt[b] == mask_id
+
         if not mask_positions.any():
-            # nothing left to predict → return last token
-            first_pos[b] = seq_len - 1
+            # no masks left → append zeros or some sentinel
+            all_thresholds.append([torch.tensor(0.0, device=eos_scores.device)
+                                   for _ in percentiles])
+            # no masks left → append zeros or some sentinel
+            all_thresholds.append([torch.tensor(0.0, device=eos_scores.device)
+                                   for _ in percentiles])
             continue
 
+        # scores only at masked positions
+        # scores only at masked positions
         masked_scores = eos_scores[b][mask_positions]
 
-        # score threshold for this sample
-        thresh = torch.quantile(masked_scores, percentiles)
+        # for each percentile, compute and collect threshold
+        thresholds_b: list[torch.Tensor] = []
+        for p in percentiles:
+            thresh = torch.quantile(masked_scores, p)
+            thresholds_b.append(thresh)
+        all_thresholds.append(thresholds_b)
+        # for each percentile, compute and collect threshold
+        thresholds_b: list[torch.Tensor] = []
+        for p in percentiles:
+            thresh = torch.quantile(masked_scores, p)
+            thresholds_b.append(thresh)
+        all_thresholds.append(thresholds_b)
 
-        thresholds.append(thresh)
-
-    return thresholds
+    return all_thresholds
+    return all_thresholds
 
 def main():
     args = get_config()    
