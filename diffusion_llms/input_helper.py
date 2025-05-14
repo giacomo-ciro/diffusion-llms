@@ -1,42 +1,27 @@
-import os
 import yaml
 import argparse
+from pathlib import Path
 
 def parse_args():
-    """Parse command-line arguments for configuration handling."""
+    """Parse command-line arguments for configuration file location only."""
     parser = argparse.ArgumentParser(description='Train VarLenLLada model with config file')
-    parser.add_argument('--config', type=str, default='config.yaml',
+    parser.add_argument('--config', type=str, default='./diffusion_llms/llada_config.yml',
                         help='Path to configuration YAML file')
-    parser.add_argument('--resume', type=str, default=None,
-                        help='Path to checkpoint to resume from (overrides config file)')
-    parser.add_argument('--checkpoint-dir', type=str, default=None,
-                        help='Directory to save checkpoints (overrides config file)')
     return parser.parse_args()
 
 def load_config(config_path):
     """Load configuration from YAML file."""
-    if not os.path.exists(config_path):
+    config_path = Path(config_path)
+    if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
     
-    with open(config_path, 'r') as file:
+    with config_path.open('r') as file:
         try:
             config = yaml.safe_load(file)
             print(f"Configuration loaded from {config_path}")
             return config
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing YAML configuration: {e}")
-
-def override_config_with_args(config, args):
-    """Override configuration with command-line arguments."""
-    if args.resume:
-        config['checkpoint']['resume_from'] = args.resume
-        print(f"Overriding resume checkpoint: {args.resume}")
-    
-    if args.checkpoint_dir:
-        config['checkpoint']['dir'] = args.checkpoint_dir
-        print(f"Overriding checkpoint directory: {args.checkpoint_dir}")
-    
-    return config
 
 def flatten_config(config):
     """Convert nested config to flat dict for compatibility with existing code, casting ints and floats."""
@@ -53,6 +38,7 @@ def flatten_config(config):
     flat_config["embedding_dir"] = config["data"]["embedding_dir"]
     flat_config["num_workers"] = int(config["data"]["num_workers"])
     flat_config["val_test_perc"] = float(config["data"]["val_test_perc"])
+    flat_config["cache_dir"] = config["data"]["cache_dir"]
     
     # Training config
     flat_config["batch_size"] = int(config["training"]["batch_size"])
@@ -89,14 +75,16 @@ def flatten_config(config):
 
 
 def get_config():
-    """Main function to get configuration from file and command-line args."""
-    #args = parse_args()
-    config = load_config('./diffusion_llms/llada_config.yml')
-    #config = override_config_with_args(config, args)
+    """Main function to get configuration from file only (no overrides except config path)."""
+    args = parse_args()
+    config = load_config(args.config)
     
     # Create necessary directories
-    os.makedirs(config["checkpoint"]["dir"], exist_ok=True)
-    os.makedirs(config["logging"]["log_dir"], exist_ok=True)
+    Path(config["checkpoint"]["dir"]).mkdir(parents=True, exist_ok=True)
+    Path(config["logging"]["log_dir"]).mkdir(parents=True, exist_ok=True)
+    Path(config["model_to_train"]["output_dir"]).mkdir(parents=True, exist_ok=True)
+    Path(config["data"]["cache_dir"]).mkdir(parents=True, exist_ok=True)
+    Path(config["data"]["embedding_dir"]).mkdir(parents=True, exist_ok=True)
     
     # Return the flattened config for compatibility with existing code
     return flatten_config(config)
