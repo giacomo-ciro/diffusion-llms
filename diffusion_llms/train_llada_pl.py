@@ -396,7 +396,8 @@ def main():
         hidden_size=args["hidden_size"],
         context_length=args["context_length"],
         learning_rate=args["learning_rate"],
-        pos_weight=args["pos_weight"]
+        pos_weight=args["pos_weight"],
+        cache_dir=args["cache_dir"]
     )
     
     # Set up logging
