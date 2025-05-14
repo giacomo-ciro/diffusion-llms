@@ -1,4 +1,4 @@
-from train_llada_pl import LladaBackbone
+from diffusion_llms.train_llada_pl import LladaBackbone
 from diffusion_llms.dataloader.llada_dataloader import DataModule
 from diffusion_llms.input_helper import get_config
 from transformers import AutoTokenizer
@@ -8,7 +8,7 @@ import os
 @torch.no_grad()
 def step_zero(
     model,
-    masked_prompt: torch.Tensor,
+    masked_prompt: torch.Tensor, # shape (B, L)
     *,
     mask_id: int = 126336,       # the id you use for [MASK]
     eos_token_id: int = 2,       # model‑specific <eos>
@@ -75,10 +75,9 @@ def main():
     positions = []
     for glob_idx, batch in enumerate(data_module.test_dataloader()):
         input_ids = batch["input_ids"]
-        for idx, _ in enumerate(batch):
-            thresholds = step_zero(model, input_ids[idx], eos_token_id=tokenizer.eos_token_id,
-                                    percentile=[0.25, 0.50, 0.75]) #dict
-            positions.extend(thresholds)  # list of dict
+        thresholds = step_zero(model, input_ids, eos_token_id=tokenizer.eos_token_id,
+                                percentiles=[0.25, 0.50, 0.75]) #dict
+        positions.extend(thresholds)  # list of dict
 
         if glob_idx % 50 == 0:
             print(f"Processed {glob_idx} batches, current positions: {positions}")
