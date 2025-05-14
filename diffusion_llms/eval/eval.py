@@ -47,10 +47,6 @@ def main():
     )
 
     # Get GT lengths
-    # for response in df.model_response:
-    #     print(type(response))
-    #     print(tokenizer(response))
-    #     exit()
     gt = [
         len(tokenizer(response)["input_ids"])
         for response in df.model_response.dropna()
@@ -88,7 +84,7 @@ def main():
     
     # Sanity check
     for model in preds.keys():
-        assert len(preds[model]) == len(gt)
+        assert preds[model].shape == (len(gt),)
     
     # Store results
     ans = {

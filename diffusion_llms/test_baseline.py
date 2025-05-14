@@ -49,7 +49,8 @@ def step_zero(
         thresholds_b: list[torch.Tensor] = []
         for p in percentiles:
             thresh = torch.quantile(masked_scores, p)
-            thresholds_b.append(thresh.item() * 1024)
+            first_idx_above_thresh = (masked_scores > thresh).nonzero()[0]
+            thresholds_b.append(first_idx_above_thresh.item())
         all_thresholds.append(thresholds_b)
 
     return all_thresholds
