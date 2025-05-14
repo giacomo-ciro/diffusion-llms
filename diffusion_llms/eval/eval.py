@@ -56,8 +56,7 @@ def main():
         for response in df.model_response.dropna()
     ]
     print(f"Evaluating {len(gt)} test instances...")
-    print(tokenizer.encode(df.loc[2, :].model_response))
-    exit()
+
     # Get list of pred files
     # all the .npy's in this folder
     paths_to_pred = [fp for fp in os.listdir(".") if fp.endswith(".npy")]
