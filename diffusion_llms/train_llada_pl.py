@@ -159,18 +159,15 @@ class LLaDaRegressor(nn.Module):
         super().__init__()
         self.regressor = nn.Linear(hidden_size, 1)
     
-    def forward(self, hidden_states):
-        # hidden_states: [B, T, D]
+    def forward(self, polled_hidden_states):
+        # hidden_states: [B, D]
 
         # Check if shape is correct
-        assert hidden_states.dim() == 3, f"Expected 3D tensor, got {hidden_states.dim()}D tensor"
-        assert hidden_states.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_states.size(2)}"
-
-        # pool them with mean
-        pooled = hidden_states.mean(dim=1)  # [B, D]
+        assert polled_hidden_states.dim() == 2, f"Expected 3D tensor, got {polled_hidden_states.dim()}D tensor"
+        assert polled_hidden_states.size(1) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {polled_hidden_states.size(2)}"
 
 
-        return self.regressor(pooled).squeeze(-1)
+        return self.regressor(polled_hidden_states).squeeze(-1)
 
 class LLaDaFullRegressor(nn.Module):
     def __init__(self, context_length, hidden_size):
