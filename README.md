@@ -1,5 +1,13 @@
 # Diffusion LLMs
 
+Davide Beltrame, Giacomo Cirò, Luca Gandolfi, Vittorio Rossi
+
+## Abstract
+
+  Diffusion language models (DLMs) offer faster inference than autoregressive methods. We present a more efficient approach for variable-length text generation with LLaDa, an 8B-parameter DLM. Instead of generating fixed-size blocks until an EOS token, our method predicts an upper bound on output length from the input context, allowing truncation to the nearest power of two. This reduces unnecessary tokens and can reduce computational overhead compared to block-based strategies depending on the generation setup. We evaluate both length prediction accuracy and downstream performance under this new paradigm. *We propose a benchmark for evaluating the upper bound on the EoS classification.*
+
+## Overview
+
 The authors of the DiffuGPT paper adapted an Autoregressive Language Model (ARM), namely GPT-2, to obtain a Diffusion Language Model (DLM) while leveraging the pre-trained weights with almost no loss in performance. 
 
 However, they did not address the issue of fixed output length which comes with discrete diffusion. In fact, DiffuGPT is only capable of generating output whose length is the full diffusion context size, which is not always the best choice and can also hinder performance in some cases. For example, in the case of a yes/no question, the model is forced to generate a full 512 tokens output, even if the answer is only 2 tokens long.
@@ -12,10 +20,46 @@ Then, we test how confident our model is in predicting the EoS token at the firs
 
 Finally, we propose a method to improve the model capacity of predicting the EoS token: fine-tuning on [text + mask + EoS + mask] examples to improve the model's accuracy in predicting the eos token at the first diffusion step by only looking at the provided context.
 
+---
+
+We implement and extend Diffusion Language Models (DLMs), focusing on improving variable-length text generation efficiency. DLMs offer significant advantages over traditional autoregressive language models, particularly in terms of inference speed, but face challenges with fixed-output length constraints.
+
+### Core Concepts
+
+**DiffuGPT Extension**: We build upon the DiffuGPT approach, which adapts GPT-2 to create a Diffusion Language Model while preserving performance. However, DiffuGPT generates fixed-length outputs regardless of content needs, wasting computational resources.
+
+**Variable-Length Generation**: Our key innovation is implementing efficient variable-length generation for diffusion models through:
+
+1. **EOS Token Prediction**: Developing models that can accurately predict the appropriate End-of-Sequence (EOS) token position early in the diffusion process
+2. **Early Termination**: Implementing techniques to stop the diffusion process once meaningful content has been generated
+3. **Length Prediction**: Incorporating length prediction models to estimate required output length based on input prompts
+
+### Implementation Approaches
+
+We explore multiple methods for improving EOS prediction:
+
+1. **Fine-tuning with [text + EOS + PAD]**: Training models to recognize padding patterns and generate EOS tokens at appropriate positions
+2. **EOS Classification**: Developing specialized classification heads to predict EOS placement
+3. **Length Regression**: Using regression models to predict output sequence lengths directly from input contexts
+4. **DistilBERT Adaptation**: Leveraging pre-trained language models to predict output lengths from input prompts
+
+### Evaluation Framework
+
+Our comprehensive evaluation system measures both:
+
+1. **Accuracy**: How well models predict appropriate sequence lengths and EOS positions
+2. **Performance**: Assessing generation quality on standard language model benchmarks
+
+The evaluation framework in `evaluation/` includes:
+- `eval_eos.py`: Focused on EOS token prediction accuracy
+- [REMOVE] `eval_test.py`: Comprehensive testing across various language understanding benchmarks
+- `eval.py`: General evaluation pipeline for diffusion models
+
+This work represents a significant step toward more efficient and practical diffusion language models for real-world applications where output length varies significantly based on context.
+
 ## TO-DO's
 - [ ] Measure performance (eos prediction accuracy, benchmarks) of pre-trained DiffuGPT before and after fine-tuning on dataset of (text + eos + pad)
 - [ ] Curriculum learning on optimzer steps (currently is on samples, +1 every time a new sample is yielded)
-
 - [dave] - Implement Classification/PredictionDataset in `datamodule.py` to generate training data that predicts 1 for eos and 0 for non-eos tokens.
 - see datamodule, same for regression.
 - [dave] - Implement RegressionDataset in `datamodule.py` to handle the length of the sequence.
@@ -23,14 +67,12 @@ Finally, we propose a method to improve the model capacity of predicting the EoS
 - dataloader iterates over the dataset and returns a batch of sequences
 - get item handles the logic of how to get the data from the dataset and returns X, y, msk
 - structure of the file class regression with methods: init with prompts and answer, len, get item (which returns x, y, msk); second class: memmapdatamodule with 
-- [luca] - 
-- [vitto] - 
 
 ### Sync 30/04/25
-- [ ] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
+- [x] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
     - otherwise, we mask and unmask tokens until model predicts where the eos token is
     - observation: if the model is able to predict some mask tokens, it is likely to predict the eos token as well
-- [dave - in progress] Define a method to evaluate our specific task, e.g., how to measure the performance of the model in predicting the eos token at the first step of the diffusion process (accuracy / metrics / as function of numbe of unmasked tokens etc).
+- [x] Define a method to evaluate our specific task, e.g., how to measure the performance of the model in predicting the eos token at the first step of the diffusion process (accuracy / metrics / as function of numbe of unmasked tokens etc).
 - [ ] Complete `check_config_validity` in `utils.py`
 
 ### Experiments
@@ -77,7 +119,7 @@ after training them, we can evaluate them on the test set.
 - [ ] add table to the report - how good are the models at predicting the eos token?
 - [ ] generate with 25 - 50 - 75% of the tokens masked : 5 
 
-### Feedback from Professor
+### Feedback from Professor (private)
 - ambition is good, doability is the question
 - concretize the chance of success - a series of questions that can be answered quickly at the beginning
 - check how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
@@ -88,55 +130,113 @@ after training them, we can evaluate them on the test set.
 
 ## Usage
 
-Install the necessary packages using `pip`:
+We provide a comprehensive toolkit for training, evaluating, and using diffusion language models. Follow these instructions to get started.
+
+### Installation
+
+Install the required packages:
 
 ```bash
 $ python -m pip install -r requirements.txt
 ```
 
-The `config.json` is the unique place where to specify hyper-parameters for all the tasks to perform. It handles the model instantiation logic, training and sampling procedure.
+### Configuration
 
-### Training
-To train, you first have to generate the training data from FineWeb dataset and save it to a `np.memmap` object:
+The `config.json` file is the central place for configuring all aspects of the system:
+- Model architecture (dimensions, layers, etc.)
+- Training parameters (learning rate, batch size, etc.)
+- Generation settings (temperature, strategies, etc.)
+- Evaluation metrics and benchmarks
+
+You can create a local copy for experimentation:
+
+```bash
+$ cp config.json local_config.json  # This file is gitignored
+```
+
+### Data Preparation
+
+For training, prepare data from the FineWeb dataset in two formats:
+
+#### 1. Standard Sequential Format
 ```bash
 $ cd diffusion-llms/data
+$ python prepare.py 100  # Creates memmap with 100 documents
 ```
-To create a unique memmap array of tokens, corresponding to the specified number of documents in the dataset, separated by the eos tokens:
+
+#### 2. Variable-Length with Padding
 ```bash
-$ python prepare.py 100
+$ cd diffusion-llms/data
+$ python prepare_var_len.py path/to/config.json --train 100 --test 10
 ```
-Instead, to create a unique memmap array of tokens, corresponding to documents in the dataset, where each document is of the same length (pad token id is appended). In the `config.json` file you can specify the length of each document `context_length` and the `pad_token_id` to use for padding shorter documents. The attributes are useed to specify how man documents to use for training and testing. Two different memmap arrays are created with the train and test documents.
+This creates separate train/test memmaps with each document padded to the same length.
+
+### Training
+
+The repository supports multiple training approaches:
+
+#### Standard Training
 ```bash
-$ python prepare_var_len.py path/to/config.json --train 100 -test 10
-```
-Once the data is ready, we specify the path in the `config.json` together with the other hyper-params used for training and start training:
-```bash
-$ cd ..
 $ python train.py path/to/config.json
 ```
-Training can be conducted starting from:
-- Auto-regressive Model (scratch or GPT-2 checkpoint)
-- Diffusion Model (scratch or diffuGPT checkpoint)
-And using the pipeline:
-- Auto-regressive (predict next tokne, causal attention mask)
-- Diffusion (predict masked tokens, full-attention mask)
-When training with diffusion, you can specify the attention annealing schedule. When using a padded dataset, you can introduce a pad annealing schedule (to gradually mask pad tokens).
 
-### Sampling
-We can sample using diffusion or autoregressive strategy from any model. We specify a combination of `pipeline` (diffusion or arm) and `init_from` keys in the `config.json`. Then we add the `user_prompt` and the generation arguments (top k, temperature, denoising strategy etc.). Then run:
-``` bash 
-$ cd diffusion-llms
+#### LLaDa Approach Training
+```bash
+$ python train_llada.py path/to/config.json
+```
+
+#### Lightning-based Training
+```bash
+$ python train_llada_pl.py path/to/config.json
+```
+
+#### Specialized Training for EOS Prediction
+
+Multiple notebook-based approaches are provided in the `baseline/` directory:
+- `train_DistilBERT_DGPT_clas.ipynb`: Classification-based EOS prediction
+- `train_DistilBERT_DGPT_reg.ipynb`: Regression-based length prediction
+- `train_DistilBERT_LLaDa_clas.ipynb`: Classification for LLaDa models
+
+### Sampling and Generation
+
+Generate text using either diffusion or autoregressive methods:
+
+```bash
 $ python sample.py path/to/config.json
 ```
-Notice that we can also generate using discrete diffusion from a arm gpt2, and the results will likely be bad.
+
+For DiffuGPT-specific sampling:
+```bash
+$ python baseline/sample_DiffuGPT.py path/to/config.json
+```
 
 ### Evaluation
-We can evaluate a diffusion model on standard benchmarks:
+
+The repository offers multiple evaluation approaches:
+
+#### Standard Benchmarks
 ```bash
 $ cd evaluation
-$ python eval.py lambda 100
+$ python eval.py lambda 100  # Evaluate on lambda benchmark with 100 examples
 ```
-Where we specify the benchmark to evaluate on and the number of documents in the benchmark to test.
+
+#### EOS Prediction Evaluation
+```bash
+$ python evaluation/eval_eos.py path/to/config.json
+```
+
+#### Comprehensive Benchmark Suite [REMOVE]
+```bash
+$ python evaluation/eval_test.py --config path/to/config.json --tasks bbh gsm8k humaneval --samples 10
+```
+This evaluates the model on multiple standard benchmarks:
+- BBH (Big-Bench Hard): Reasoning tasks
+- GSM8K: Grade-school math problems
+- Minerva/MATH: Scientific reasoning
+- HumanEval: Code generation
+- MBPP: Practical Python programming
+
+Results are saved in a detailed JSON format for analysis.
 
 ### Config.json
 ```json
@@ -192,6 +292,7 @@ Where we specify the benchmark to evaluate on and the number of documents in the
   "denoising_strategy": "random"            // (str) Strategy for denoising (e.g., random, deterministic, etc.)
 }
 ```
+
 ## Misc
 1. Use own branch during development, together we handle merges.
 2. Duplicate `config.json`, rename to `local_config.json` (added to `.gitignore`) and use it to test locally.
@@ -236,7 +337,6 @@ $ python -m pip install --upgrade datasets huggingface-hub fsspec
 ├── README.md
 └── requirements.txt
 ```
-
 
 ## References
 
