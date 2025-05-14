@@ -79,7 +79,7 @@ def main():
     
     positions = []
     for glob_idx, batch in enumerate(tqdm(data_module.test_dataloader(), desc="Batches")):
-        input_ids = batch["input_ids"]
+        input_ids = batch["input_ids"].to("cuda")  # shape (B, L)
         thresholds = step_zero(model, input_ids, eos_token_id=tokenizer.eos_token_id,
                                 percentiles=[0.25, 0.50, 0.75]) #dict
         positions.extend(thresholds)  # list of dict
