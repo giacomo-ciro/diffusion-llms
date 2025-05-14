@@ -12,39 +12,15 @@ def step_zero(
     model,
     masked_prompt: torch.Tensor,  # shape (B, L)
     masked_prompt: torch.Tensor,  # shape (B, L)
-    *,
     mask_id: int = 126336,       # the id you use for [MASK]
     eos_token_id: int = 126081,       # model‑specific <eos>
     percentiles: list = [0.90],    # e.g. 0.90 → top‑10 % highest probs
-    use_probs: bool = True       # set False if you really want raw logits
-) -> torch.LongTensor:
-    mask_id: int = 126336,        # the id you use for [MASK]
-    eos_token_id: int = 12081,        # model-specific <eos>
-    percentiles: list = [0.5, 0.75, 0.90],  # e.g. [50%, 75%, 90%]
     use_probs: bool = True        # set False if you really want raw logits
-) -> list[list[torch.Tensor]]:
-    """
-    For each element in the batch, compute the quantile thresholds
-    over the currently-masked positions for each requested percentile.
-    
-    For each element in the batch, compute the quantile thresholds
-    over the currently-masked positions for each requested percentile.
-    
-    Returns
-    -------
-    thresholds : List of length B, each entry is a List of length len(percentiles)
-                 containing the threshold tensor for that percentile.
-    """
-    # Get (B, L, V)
-    logits = model(masked_prompt).logits
-    thresholds : List of length B, each entry is a List of length len(percentiles)
-                 containing the threshold tensor for that percentile.
-    """
+) -> torch.LongTensor:
     # Get (B, L, V)
     logits = model(masked_prompt).logits
     eos_token_id = getattr(model.config, "eos_token_id", eos_token_id)
 
-    # (B, L) scores for <eos>
     # (B, L) scores for <eos>
     if use_probs:
         eos_scores = torch.softmax(logits.float(), dim=-1)[..., eos_token_id]
@@ -52,7 +28,6 @@ def step_zero(
         eos_scores = logits[..., eos_token_id].float()
 
     batch_size, seq_len = eos_scores.shape
-    all_thresholds: list[list[torch.Tensor]] = []
     all_thresholds: list[list[torch.Tensor]] = []
 
     for b in range(batch_size):
@@ -81,14 +56,7 @@ def step_zero(
             thresh = torch.quantile(masked_scores, p)
             thresholds_b.append(thresh)
         all_thresholds.append(thresholds_b)
-        # for each percentile, compute and collect threshold
-        thresholds_b: list[torch.Tensor] = []
-        for p in percentiles:
-            thresh = torch.quantile(masked_scores, p)
-            thresholds_b.append(thresh)
-        all_thresholds.append(thresholds_b)
 
-    return all_thresholds
     return all_thresholds
 
 def main():
