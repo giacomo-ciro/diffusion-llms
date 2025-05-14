@@ -159,7 +159,6 @@ class LLaDaRegressor(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.regressor = nn.Linear(hidden_size, 1)
-
     
     def forward(self, polled_hidden_states):
         # hidden_states: [B, D]
@@ -213,7 +212,7 @@ class LLaDaTrainer(pl.LightningModule):
         elif model_type == "regressor":
             self.model = LLaDaRegressor(hidden_size)
         elif model_type == "full_regressor":
-            self.model = LLaDaFullRegressor(hidden_size, context_length)
+            self.model = LLaDaFullRegressor(context_length, hidden_size)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
     
