@@ -11,7 +11,6 @@ from tqdm import tqdm
 def step_zero(
     model,
     masked_prompt: torch.Tensor,  # shape (B, L)
-    masked_prompt: torch.Tensor,  # shape (B, L)
     mask_id: int = 126336,       # the id you use for [MASK]
     eos_token_id: int = 126081,       # model‑specific <eos>
     percentiles: list = [0.90],    # e.g. 0.90 → top‑10 % highest probs
@@ -39,11 +38,7 @@ def step_zero(
 
         if not mask_positions.any():
             # no masks left → append zeros or some sentinel
-            all_thresholds.append([torch.tensor(0.0, device=eos_scores.device)
-                                   for _ in percentiles])
-            # no masks left → append zeros or some sentinel
-            all_thresholds.append([torch.tensor(0.0, device=eos_scores.device)
-                                   for _ in percentiles])
+            all_thresholds.append([0.0 for _ in percentiles])
             continue
 
         # scores only at masked positions
@@ -54,7 +49,7 @@ def step_zero(
         thresholds_b: list[torch.Tensor] = []
         for p in percentiles:
             thresh = torch.quantile(masked_scores, p)
-            thresholds_b.append(thresh)
+            thresholds_b.append(thresh.item() * 1024)
         all_thresholds.append(thresholds_b)
 
     return all_thresholds
