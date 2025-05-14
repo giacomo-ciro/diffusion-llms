@@ -15,3 +15,5 @@ diffusion-llms/data/*/
 local_data
 
 .venv
+
+report
