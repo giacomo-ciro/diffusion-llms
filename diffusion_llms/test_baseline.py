@@ -5,6 +5,8 @@ from transformers import AutoTokenizer, AutoModel
 import torch 
 import numpy as np
 import os
+from tqdm import tqdm
+
 @torch.no_grad()
 def step_zero(
     model,
@@ -74,7 +76,7 @@ def main():
     model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)
     
     positions = []
-    for glob_idx, batch in enumerate(data_module.test_dataloader()):
+    for glob_idx, batch in enumerate(tqdm(data_module.test_dataloader(), desc="Batches")):
         input_ids = batch["input_ids"]
         thresholds = step_zero(model, input_ids, eos_token_id=tokenizer.eos_token_id,
                                 percentiles=[0.25, 0.50, 0.75]) #dict
