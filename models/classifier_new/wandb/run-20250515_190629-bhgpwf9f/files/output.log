@@ -1,0 +1,35 @@
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loading `train_dataloader` to estimate number of stepping batches.
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+
+  | Name     | Type            | Params | Mode
+-----------------------------------------------------
+0 | backbone | LladaBackbone   | 8.0 B  | train
+1 | model    | LLaDaClassifier | 8.4 M  | train
+-----------------------------------------------------
+526 M     Trainable params
+7.5 B     Non-trainable params
+8.0 B     Total params
+32,095.896Total estimated model params size (MB)
+6         Modules in train mode
+422       Modules in eval mode
+Epoch 2: 100%|████████████████| 847/847 [17:00<00:00,  0.83it/s, v_num=wf9f, train/loss=0.0582, train/acc=0.932, val/loss=0.0921, val/acc=0.905, val/auc=0.974]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+Testing DataLoader 0: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████| 313/313 [05:10<00:00,  1.01it/s]
+Metric val/loss improved. New best score: 0.146
+Metric val/loss improved by 0.001 >= min_delta = 0.0. New best score: 0.145
+Metric val/loss improved by 0.035 >= min_delta = 0.0. New best score: 0.111
+Metric val/loss improved by 0.014 >= min_delta = 0.0. New best score: 0.097
+Metric val/loss improved by 0.000 >= min_delta = 0.0. New best score: 0.097
+Metric val/loss improved by 0.000 >= min_delta = 0.0. New best score: 0.097
+Metric val/loss improved by 0.005 >= min_delta = 0.0. New best score: 0.092
+`Trainer.fit` stopped: `max_epochs=3` reached.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'test_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+       Test metric             DataLoader 0
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        test/acc             0.902171790599823
+        test/loss           0.08928799629211426
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Training completed! Final model saved to: ./models/classifier_new/final_classifier_model.ckpt

@@ -16,9 +16,9 @@ data:
 
 # Training parameters
 training:
-  batch_size: 4
+  batch_size: 16
   learning_rate: 1e-3
-  epochs: 1
+  epochs: 3
   accumulate_grad: 1
   max_steps: 5000
   seed: 42
@@ -43,14 +43,14 @@ early_stopping:
 
 # Logging and monitoring
 logging:
-  run_name: "variable-length-llada"
+  run_name: "regressor_mlp_2"
   project_name: "diffusion-llms"
   log_dir: "./logs"
 
 # Model-specific configurations
 model_to_train:
-  type: "regressor"  # Options: "classifier", "regressor", "full_regressor"
-  output_dir: "./models/regressor_mlp"
+  type: "classifier"  # Options: "classifier", "regressor", "full_regressor"
+  output_dir: "./models/classifier_new"
   pos_weight: 0.277
   
   #regressor:

@@ -1,0 +1,40 @@
+{
+  "os": "Linux-6.8.0-57-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.12",
+  "startedAt": "2025-05-15T16:45:23.174620Z",
+  "program": "-m diffusion_llms.train_llada_pl",
+  "git": {
+    "remote": "git@github.com:giacomo-ciro/diffusion-llms.git",
+    "commit": "de8cbe763d8175efe6a52134c43f9d986093dd46"
+  },
+  "email": "rossi.vittori@gmail.com",
+  "root": "./models/regressor_mlp",
+  "host": "51c58fc8c35b",
+  "executable": "/usr/bin/python",
+  "cpu_count": 112,
+  "cpu_count_logical": 224,
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "536870912000",
+      "used": "17245134848"
+    }
+  },
+  "memory": {
+    "total": "1622952181760"
+  },
+  "cpu": {
+    "count": 112,
+    "countLogical": 224
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA H100 80GB HBM3",
+      "memoryTotal": "85520809984",
+      "cudaCores": 16896,
+      "architecture": "Hopper"
+    }
+  ],
+  "cudaVersion": "12.8"
+}

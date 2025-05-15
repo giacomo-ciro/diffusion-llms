@@ -1,0 +1,20 @@
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+
+  | Name     | Type           | Params | Mode
+----------------------------------------------------
+0 | backbone | LladaBackbone  | 8.0 B  | train
+1 | model    | LLaDaRegressor | 8.4 M  | train
+----------------------------------------------------
+526 M     Trainable params
+7.5 B     Non-trainable params
+8.0 B     Total params
+32,095.896Total estimated model params size (MB)
+7         Modules in train mode
+422       Modules in eval mode
+Epoch 0:  19%|████▋                    | 636/3385 [03:40<15:54,  2.88it/s, v_num=mzp2, train/loss=0.581, train/rmse=781.0, val/loss=0.665, val/rmse=833.0]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+                                                                                                                                                          
+Metric val/loss improved. New best score: 0.665
+
+Detected KeyboardInterrupt, attempting graceful shutdown ...

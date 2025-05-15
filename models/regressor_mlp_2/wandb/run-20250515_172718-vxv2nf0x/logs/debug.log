@@ -1,0 +1,25 @@
+2025-05-15 17:27:18,775 INFO    MainThread:19146 [wandb_setup.py:_flush():70] Current SDK version is 0.19.11
+2025-05-15 17:27:18,775 INFO    MainThread:19146 [wandb_setup.py:_flush():70] Configure stats pid to 19146
+2025-05-15 17:27:18,775 INFO    MainThread:19146 [wandb_setup.py:_flush():70] Loading settings from /root/.config/wandb/settings
+2025-05-15 17:27:18,775 INFO    MainThread:19146 [wandb_setup.py:_flush():70] Loading settings from /workspace/diffusion-llms/wandb/settings
+2025-05-15 17:27:18,775 INFO    MainThread:19146 [wandb_setup.py:_flush():70] Loading settings from environment variables
+2025-05-15 17:27:18,776 INFO    MainThread:19146 [wandb_init.py:setup_run_log_directory():724] Logging user logs to ./models/regressor_mlp_2/wandb/run-20250515_172718-vxv2nf0x/logs/debug.log
+2025-05-15 17:27:18,776 INFO    MainThread:19146 [wandb_init.py:setup_run_log_directory():725] Logging internal logs to ./models/regressor_mlp_2/wandb/run-20250515_172718-vxv2nf0x/logs/debug-internal.log
+2025-05-15 17:27:18,776 INFO    MainThread:19146 [wandb_init.py:init():852] calling init triggers
+2025-05-15 17:27:18,776 INFO    MainThread:19146 [wandb_init.py:init():857] wandb.init called with sweep_config: {}
+config: {'_wandb': {}}
+2025-05-15 17:27:18,776 INFO    MainThread:19146 [wandb_init.py:init():893] starting backend
+2025-05-15 17:27:18,776 INFO    MainThread:19146 [wandb_init.py:init():897] sending inform_init request
+2025-05-15 17:27:18,780 INFO    MainThread:19146 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2025-05-15 17:27:18,780 INFO    MainThread:19146 [wandb_init.py:init():907] backend started and connected
+2025-05-15 17:27:18,781 INFO    MainThread:19146 [wandb_init.py:init():1005] updated telemetry
+2025-05-15 17:27:18,785 INFO    MainThread:19146 [wandb_init.py:init():1029] communicating run to backend with 90.0 second timeout
+2025-05-15 17:27:19,580 INFO    MainThread:19146 [wandb_init.py:init():1104] starting run threads in backend
+2025-05-15 17:27:19,709 INFO    MainThread:19146 [wandb_run.py:_console_start():2573] atexit reg
+2025-05-15 17:27:19,709 INFO    MainThread:19146 [wandb_run.py:_redirect():2421] redirect: wrap_raw
+2025-05-15 17:27:19,709 INFO    MainThread:19146 [wandb_run.py:_redirect():2490] Wrapping output streams.
+2025-05-15 17:27:19,709 INFO    MainThread:19146 [wandb_run.py:_redirect():2513] Redirects installed.
+2025-05-15 17:27:19,710 INFO    MainThread:19146 [wandb_init.py:init():1150] run started, returning control to user process
+2025-05-15 17:27:23,732 INFO    MainThread:19146 [wandb_run.py:_config_callback():1436] config_cb None None {'model_type': 'regressor', 'hidden_size': 4096, 'context_length': 1024, 'cache_dir': '/root/cache_hidden', 'learning_rate': 0.001, 'pos_weight': 0.277}
+2025-05-15 17:45:04,988 INFO    MainThread:19146 [wandb_run.py:_config_callback():1436] config_cb None None {'model_type': 'regressor', 'hidden_size': 4096, 'context_length': 1024, 'cache_dir': '/root/cache_hidden', 'learning_rate': 0.001, 'pos_weight': 0.277}
+2025-05-15 17:50:31,731 INFO    MsgRouterThr:19146 [mailbox.py:close():129] [no run ID] Closing mailbox, abandoning 1 handles.

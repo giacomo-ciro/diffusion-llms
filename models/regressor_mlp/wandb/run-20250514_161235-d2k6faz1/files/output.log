@@ -1,0 +1,22 @@
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/callbacks/model_checkpoint.py:654: Checkpoint directory /workspace/diffusion-llms/models/regressor_mlp/checkpoints exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loading `train_dataloader` to estimate number of stepping batches.
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+
+  | Name     | Type           | Params | Mode
+----------------------------------------------------
+0 | backbone | LladaBackbone  | 8.0 B  | train
+1 | model    | LLaDaRegressor | 8.4 M  | train
+----------------------------------------------------
+526 M     Trainable params
+7.5 B     Non-trainable params
+8.0 B     Total params
+32,095.896Total estimated model params size (MB)
+6         Modules in train mode
+422       Modules in eval mode
+Epoch 0:  23%|█████▏                 | 762/3385 [05:03<17:25,  2.51it/s, v_num=faz1, train/loss=0.0861, train/rmse=300.0, val/loss=0.0505, val/rmse=222.0]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+                                                                                                                                                          
+Metric val/loss improved. New best score: 0.050
+
+Detected KeyboardInterrupt, attempting graceful shutdown ...

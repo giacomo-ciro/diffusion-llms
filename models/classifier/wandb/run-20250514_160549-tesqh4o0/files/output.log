@@ -1,0 +1,20 @@
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/callbacks/model_checkpoint.py:654: Checkpoint directory /workspace/diffusion-llms/models/classifier/checkpoints exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loading `train_dataloader` to estimate number of stepping batches.
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+
+  | Name     | Type            | Params | Mode
+-----------------------------------------------------
+0 | backbone | LladaBackbone   | 8.0 B  | train
+1 | model    | LLaDaClassifier | 4.1 K  | train
+-----------------------------------------------------
+518 M     Trainable params
+7.5 B     Non-trainable params
+8.0 B     Total params
+32,062.341Total estimated model params size (MB)
+3         Modules in train mode
+422       Modules in eval mode
+Epoch 0:   1%|▋                                                          | 43/3385 [00:13<17:32,  3.18it/s, v_num=h4o0, train/loss=1.570, train/acc=0.800]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+
+Detected KeyboardInterrupt, attempting graceful shutdown ...

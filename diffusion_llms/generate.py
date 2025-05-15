@@ -221,7 +221,7 @@ def generate_step_zero_based(
 @torch.no_grad()
 def generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
              cfg_scale=0., remasking='low_confidence', mask_id=126336, method='step_zero',
-             percentile=0.9
+             percentile=0.25
              ):
     '''
     Args:

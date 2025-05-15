@@ -1,0 +1,77 @@
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+
+  | Name     | Type            | Params | Mode
+-----------------------------------------------------
+0 | backbone | LladaBackbone   | 8.0 B  | train
+1 | model    | LLaDaClassifier | 4.1 K  | train
+-----------------------------------------------------
+518 M     Trainable params
+7.5 B     Non-trainable params
+8.0 B     Total params
+32,062.341Total estimated model params size (MB)
+3         Modules in train mode
+422       Modules in eval mode
+Epoch 0:  65%|█████████▋     | 2200/3385 [13:41<07:22,  2.68it/s, v_num=og94, train/loss=0.0763, train/acc=0.882, val/loss=0.143, val/acc=0.826, val/auc=0.969]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+Testing DataLoader 0:  19%|██████████████████▎                                                                              | 236/1250 [01:14<05:19,  3.17it/s]
+Metric val/loss improved. New best score: 0.186
+Metric val/loss improved by 0.025 >= min_delta = 0.0. New best score: 0.161
+Metric val/loss improved by 0.034 >= min_delta = 0.0. New best score: 0.128
+Metric val/loss improved by 0.001 >= min_delta = 0.0. New best score: 0.127
+Metric val/loss improved by 0.007 >= min_delta = 0.0. New best score: 0.119
+Metric val/loss improved by 0.005 >= min_delta = 0.0. New best score: 0.115
+Monitored metric val/loss did not improve in the last 3 records. Best score: 0.115. Signaling Trainer to stop.
+`Trainer.fit` stopped: `max_epochs=1` reached.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'test_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/workspace/diffusion-llms/diffusion_llms/train_llada_pl.py", line 468, in <module>
+    main()
+  File "/workspace/diffusion-llms/diffusion_llms/train_llada_pl.py", line 461, in main
+    trainer.test(model, data_module.test_dataloader())
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/trainer.py", line 775, in test
+    return call._call_and_handle_interrupt(
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/call.py", line 48, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/trainer.py", line 817, in _test_impl
+    results = self._run(model, ckpt_path=ckpt_path)
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/trainer.py", line 1012, in _run
+    results = self._run_stage()
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/trainer.py", line 1049, in _run_stage
+    return self._evaluation_loop.run()
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/loops/utilities.py", line 179, in _decorator
+    return loop_run(self, *args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/loops/evaluation_loop.py", line 138, in run
+    batch, batch_idx, dataloader_idx = next(data_fetcher)
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/loops/fetchers.py", line 134, in __next__
+    batch = super().__next__()
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/loops/fetchers.py", line 61, in __next__
+    batch = next(self.iterator)
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/utilities/combined_loader.py", line 341, in __next__
+    out = next(self._iterator)
+  File "/usr/local/lib/python3.10/dist-packages/pytorch_lightning/utilities/combined_loader.py", line 142, in __next__
+    out = next(self.iterators[0])
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/dataloader.py", line 630, in __next__
+    data = self._next_data()
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/dataloader.py", line 1345, in _next_data
+    return self._process_data(data)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/dataloader.py", line 1371, in _process_data
+    data.reraise()
+  File "/usr/local/lib/python3.10/dist-packages/torch/_utils.py", line 694, in reraise
+    raise exception
+TypeError: Caught TypeError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/_utils/worker.py", line 308, in _worker_loop
+    data = fetcher.fetch(index)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/_utils/fetch.py", line 51, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/_utils/fetch.py", line 51, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "/workspace/diffusion-llms/diffusion_llms/dataloader/llada_dataloader.py", line 36, in __getitem__
+    full_text = prompt_text + response
+TypeError: can only concatenate str (not "float") to str

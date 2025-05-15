@@ -1,0 +1,34 @@
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/callbacks/model_checkpoint.py:654: Checkpoint directory /workspace/diffusion-llms/models/regressor_mlp/checkpoints exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loading `train_dataloader` to estimate number of stepping batches.
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+
+  | Name     | Type           | Params | Mode
+----------------------------------------------------
+0 | backbone | LladaBackbone  | 8.0 B  | train
+1 | model    | LLaDaRegressor | 8.4 M  | train
+----------------------------------------------------
+526 M     Trainable params
+7.5 B     Non-trainable params
+8.0 B     Total params
+32,095.896Total estimated model params size (MB)
+6         Modules in train mode
+422       Modules in eval mode
+Epoch 0: 100%|█| 847/847 [17:57<00:00,  0.79it/s, v_num=og40, train/loss_log_MSE=0.0772, train/RMSE_tokens_step=18.00, train/MAE_tokens_step=1                 
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+Testing DataLoader 0: 100%|█████████████████████████████████████████████████████████████████████████████████| 313/313 [06:32<00:00,  0.80it/s]                 
+Metric train/loss_log_MSE improved. New best score: 0.746
+Metric train/loss_log_MSE improved by 0.392 >= min_delta = 0.0. New best score: 0.354
+Metric train/loss_log_MSE improved by 0.144 >= min_delta = 0.0. New best score: 0.211
+`Trainer.fit` stopped: `max_epochs=1` reached.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/usr/local/lib/python3.10/dist-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'test_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=223` in the `DataLoader` to improve performance.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+       Test metric             DataLoader 0
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     test/MAE_tokens         82.75342559814453
+     test/R2_tokens        0.028314786031842232
+    test/RMSE_tokens        105.84930419921875
+    test/loss_log_MSE       0.49367526173591614
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Training completed! Final model saved to: ./models/regressor_mlp/final_regressor_model.ckpt

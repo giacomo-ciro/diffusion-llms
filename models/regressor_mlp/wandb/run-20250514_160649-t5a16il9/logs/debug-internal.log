@@ -1,0 +1,16 @@
+{"time":"2025-05-14T16:06:49.978583465Z","level":"INFO","msg":"stream: starting","core version":"0.19.11","symlink path":"models/regressor_mlp/wandb/run-20250514_160649-t5a16il9/logs/debug-core.log"}
+{"time":"2025-05-14T16:07:20.09745839Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2025-05-14T16:07:22.564829242Z","level":"INFO","msg":"created new stream","id":"t5a16il9"}
+{"time":"2025-05-14T16:07:22.564919549Z","level":"INFO","msg":"stream: started","id":"t5a16il9"}
+{"time":"2025-05-14T16:07:22.564952919Z","level":"INFO","msg":"writer: Do: started","stream_id":"t5a16il9"}
+{"time":"2025-05-14T16:07:22.565038829Z","level":"INFO","msg":"handler: started","stream_id":"t5a16il9"}
+{"time":"2025-05-14T16:07:22.56501988Z","level":"INFO","msg":"sender: started","stream_id":"t5a16il9"}
+{"time":"2025-05-14T16:07:23.290502213Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-05-14T16:09:25.678539136Z","level":"INFO","msg":"stream: closing","id":"t5a16il9"}
+{"time":"2025-05-14T16:09:25.678602903Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-05-14T16:09:25.678719158Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-05-14T16:09:26.343236085Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-05-14T16:09:26.579196923Z","level":"INFO","msg":"handler: closed","stream_id":"t5a16il9"}
+{"time":"2025-05-14T16:09:26.579269243Z","level":"INFO","msg":"writer: Close: closed","stream_id":"t5a16il9"}
+{"time":"2025-05-14T16:09:26.579283304Z","level":"INFO","msg":"sender: closed","stream_id":"t5a16il9"}
+{"time":"2025-05-14T16:09:26.579421723Z","level":"INFO","msg":"stream: closed","id":"t5a16il9"}

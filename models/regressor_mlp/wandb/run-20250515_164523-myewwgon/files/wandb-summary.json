@@ -1,0 +1,1 @@
+{"_runtime":93.785716079,"train/RMSE_tokens_step":3252.547119140625,"epoch":0,"train/loss_log_MSE":4.298789024353027,"_wandb":{"runtime":112},"_timestamp":1.7473276169601743e+09,"train/MAE_tokens_step":1821.880615234375,"trainer/global_step":69,"_step":6,"train/R2_tokens_step":-990.8726806640625}

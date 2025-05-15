@@ -58,7 +58,7 @@ class LladaBackbone(pl.LightningModule):
         return hidden
 
     def forward(self, input_ids, target=None):
-        return self._load_or_compute_hidden(input_ids)   
+        return self.forward_hidden_repr(input_ids)   
 
     def forward_hidden_repr(self, input_ids, attention_mask=None):
         """
@@ -520,14 +520,14 @@ def main():
         ModelCheckpoint(
             dirpath=os.path.join(args["output_dir"], 'checkpoints'),
             filename=f'{args["model_type"]}-{{epoch:02d}}-{{val/loss:.4f}}',
-            monitor='train/loss_log_MSE',
+            monitor='val/loss',
             mode='min',
             save_top_k=3
         ),
         
         # Early stopping
         EarlyStopping(
-            monitor='train/loss_log_MSE',
+            monitor='val/loss',
             patience=args["patience"],
             mode='min',
             verbose=True
@@ -536,7 +536,7 @@ def main():
     
     # Create trainer
     trainer = pl.Trainer(
-        max_epochs=1,
+        max_epochs=args["n_epochs"],
         accelerator='auto',  # Automatically use GPU if available
         devices=1,
         logger=logger,
