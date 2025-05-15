@@ -138,61 +138,44 @@ class LladaBackbone(pl.LightningModule):
 
 
 class LLaDaClassifier(nn.Module):
-    """Classification head for LLaDA. Predicts if a token is an EOS token or not."""
+    """Classification head for LLaDA. Two‑layer MLP that predicts if each token is EOS (per‑token binary classification)."""
     def __init__(self, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
-        self.classifier = nn.Linear(hidden_size, 1)
+        self.net = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.GELU(),
+            nn.Linear(hidden_size // 2, 1)
+        )
 
     def forward(self, hidden_state):
-        # hidden_states: [B, 1, D]
+        # hidden_state: [B, T, D]
 
         # Check if shape is correct
-        assert hidden_state.dim() == 3, f"Expected 3D tensor, got {hidden_state.dim()}D tensor"
+        assert hidden_state.dim() == 3, f"Expected [B,T,D] tensor, got {hidden_state.dim()}D tensor"
         assert hidden_state.size(2) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {hidden_state.size(2)}"
 
-        return self.classifier(hidden_state).squeeze(-1)
+        # reshape so the MLP sees one token per row
+        B, T, D = hidden_state.shape
+        hidden_flat = hidden_state.view(-1, D)          # [B*T, D]
+        logits_flat = self.net(hidden_flat).squeeze(-1)  # [B*T]
+        logits = logits_flat.view(B, T)                  # [B, T]
+        return logits
 
 class LLaDaRegressor(nn.Module):
-    """Regression head for LLaDA using pooled output"""
+    """Predict log-token-count from pooled encoder output."""
     def __init__(self, hidden_size):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.regressor = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size//2),
-            nn.ReLU(),
-            nn.Dropout(p=0.2),
-            nn.Linear(hidden_size//2, 1)
-        )
-    
-    def forward(self, polled_hidden_states):
-        # hidden_states: [B, D]
-
-        # Check if shape is correct
-        assert polled_hidden_states.dim() == 2, f"Expected 3D tensor, got {polled_hidden_states.dim()}D tensor"
-        assert polled_hidden_states.size(1) == self.hidden_size, f"Expected hidden size of {self.hidden_size}, got {polled_hidden_states.size(2)}"
-
-        return self.regressor(polled_hidden_states).squeeze(-1)
-
-class LLaDaFullRegressor(nn.Module):
-    def __init__(self, context_length, hidden_size):
-        super().__init__()
-        self.context_length = context_length
-        self.hidden_size = hidden_size
-        self.full_regressor = nn.Sequential(
-            nn.Linear(hidden_size * context_length, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(p=0.2),
-            nn.Linear(hidden_size, 1)
+        self.net = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.GELU(),
+            nn.Linear(hidden_size // 2, 1)
         )
 
-    def forward(self, hidden_states):
-        batch_size, seq_len, hidden_dim = hidden_states.size()
-        assert seq_len == self.context_length, f"Expected {self.context_length}, got {seq_len}"
-
-        flattened = hidden_states.view(batch_size, -1)  # [B, T*D]
-        return self.full_regressor(flattened).squeeze(-1)
-
+    def forward(self, pooled):
+        assert pooled.ndim == 2, f"Expected [B, D], got {pooled.shape}"
+        return self.net(pooled).squeeze(-1)   # log-length
+        
 class LLaDaTrainer(pl.LightningModule):
     """
     PyTorch Lightning module for training a single LLaDA model.
@@ -221,9 +204,6 @@ class LLaDaTrainer(pl.LightningModule):
             self.model = LLaDaClassifier(hidden_size)
         elif model_type == "regressor":
             self.model = LLaDaRegressor(hidden_size)
-        elif model_type == "full_regressor":
-            self.model = LLaDaFullRegressor(context_length, hidden_size)
-            print(self.model)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
     
@@ -243,11 +223,7 @@ class LLaDaTrainer(pl.LightningModule):
         if self.model_type == "classifier":
             x = llada_hidden_states
             y = batch["eos_labels"].float()
-            # Shuffle the indexes
-            idx = torch.randperm(x.size(0))
-            x = x[idx]
-            y = y[idx]
-            
+            # Use all token representations as-is
             logits = self.model(x)
             loss = F.binary_cross_entropy_with_logits(
                 logits, y, 
@@ -265,42 +241,36 @@ class LLaDaTrainer(pl.LightningModule):
                 
         elif self.model_type == "regressor":
             x = pooled_hidden_states
+            # training step
             y = batch["true_length"].float()
-            
-            # Normalize target to 0-1 range
-            y_normalized = y / self.context_length
-            
-            preds = self.model(x)
-            preds = torch.exp(preds)
-            loss = F.mse_loss(preds, y_normalized)
-            
-            # Log metrics
-            self.log('train/loss', loss, prog_bar=True)
-            
-            # Calculate RMSE in original scale
-            with torch.no_grad():
-                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
-                self.log('train/rmse', rmse, prog_bar=True)
+            y_log = torch.log1p(y)          # log(1 + length) for stability
+
+            pred_log = self.model(pooled_hidden_states)  # <- use the same tensor you called x
+            loss      = F.mse_loss(pred_log, y_log)      # MSE on log-scale targets
+            self.log("train/loss_log_MSE", loss, prog_bar=True)
                 
-        elif self.model_type == "full_regressor":
-            x = llada_hidden_states
-            y = batch["true_length"].float()
-            
-            # Normalize target to 0-1 range
-            y_normalized = y / self.context_length
-            
-            preds = self.model(x)
-            preds = torch.exp(preds)
-            loss = F.mse_loss(preds, y_normalized)
-            
-            # Log metrics
-            self.log('train/loss', loss, prog_bar=True)
-            
             # Calculate RMSE in original scale
             with torch.no_grad():
-                rmse = torch.sqrt(F.mse_loss(torch.exp(preds) * self.context_length, y))
-                self.log('train/rmse', rmse, prog_bar=True)
-        
+                pred_len = torch.expm1(pred_log)          # inverse of log1p
+                rmse     = torch.sqrt(F.mse_loss(pred_len, y))
+                mae      = F.l1_loss(pred_len, y)
+
+                # (optional) coefficient of determination, protects against nan when var=0
+                ss_tot = torch.sum((y - y.mean())**2)
+                r2     = 1.0 - torch.sum((pred_len - y)**2) / (ss_tot + 1e-8)
+
+                self.log_dict(
+                                {
+                                    "train/RMSE_tokens": rmse,
+                                    "train/MAE_tokens":  mae,
+                                    "train/R2_tokens":   r2,
+                                },
+                                prog_bar=True,      # show in tqdm
+                                on_step=True,       # every optimisation step
+                                on_epoch=True,      # and the epoch average
+                            )
+
+                
         return loss
     
     def validation_step(self, batch, batch_idx):
@@ -341,23 +311,31 @@ class LLaDaTrainer(pl.LightningModule):
                     pass
                 
         elif self.model_type == "regressor":
-            x = pooled_hidden_states
             y = batch["true_length"].float()
-            
-            # Normalize target to 0-1 range
-            y_normalized = y / self.context_length
-            
-            preds = self.model(x)
-            #preds = torch.exp(preds)
-            loss = F.mse_loss(preds, y_normalized)
-            
-            # Log metrics
-            self.log('val/loss', loss, prog_bar=True)
-            
-            # Calculate RMSE in original scale
+            y_log = torch.log1p(y)
+
+            pred_log = self.model(pooled_hidden_states)
+            loss = F.mse_loss(pred_log, y_log)
+            self.log("val/loss_log_MSE", loss, prog_bar=True)
+
+            # ---- metrics on original scale ----
             with torch.no_grad():
-                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
-                self.log('val/rmse', rmse, prog_bar=True)
+                pred_len = torch.expm1(pred_log)
+                rmse = torch.sqrt(F.mse_loss(pred_len, y))
+                mae = F.l1_loss(pred_len, y)
+                ss_tot = torch.sum((y - y.mean())**2)
+                r2 = 1.0 - torch.sum((pred_len - y)**2) / (ss_tot + 1e-8)
+
+                self.log_dict(
+                    {
+                        "val/RMSE_tokens": rmse,
+                        "val/MAE_tokens":  mae,
+                        "val/R2_tokens":   r2,
+                    },
+                    prog_bar=True,
+                    on_step=False,
+                    on_epoch=True,
+                )
                 
         elif self.model_type == "full_regressor":
             x = llada_hidden_states
@@ -408,18 +386,33 @@ class LLaDaTrainer(pl.LightningModule):
         elif self.model_type == "regressor":
             x = pooled_hidden_states
             y = batch["true_length"].float()
-            y_normalized = y / self.context_length
-            preds = self.model(x)
-            preds = torch.exp(preds)
-            loss = F.mse_loss(preds, y_normalized)
-            self.log('test/loss', loss, prog_bar=True)
+            y_log = torch.log1p(y)
+
+            pred_log = self.model(x)
+            loss = F.mse_loss(pred_log, y_log)
+            self.log('test/loss_log_MSE', loss, prog_bar=True)
+
+            # ---- metrics on original scale ----
             with torch.no_grad():
-                rmse = torch.sqrt(F.mse_loss(preds * self.context_length, y))
-                self.log('test/rmse', rmse, prog_bar=True)
+                pred_len = torch.expm1(pred_log)
+                rmse = torch.sqrt(F.mse_loss(pred_len, y))
+                mae = F.l1_loss(pred_len, y)
+                ss_tot = torch.sum((y - y.mean())**2)
+                r2 = 1.0 - torch.sum((pred_len - y)**2) / (ss_tot + 1e-8)
+
+                self.log_dict(
+                    {
+                        "test/RMSE_tokens": rmse,
+                        "test/MAE_tokens":  mae,
+                        "test/R2_tokens":   r2,
+                    },
+                    prog_bar=True,
+                )
+
                 if not hasattr(self, "regression_preds"):
                     self.regression_preds = []
-
-                self.regression_preds.append(preds.detach().cpu().flatten() * self.context_length)
+                # save predictions in token space
+                self.regression_preds.append(pred_len.detach().cpu().flatten())
 
             return {'test_loss': loss}
         elif self.model_type == "full_regressor":
@@ -467,6 +460,7 @@ class LLaDaTrainer(pl.LightningModule):
             optimizer,
             max_lr=self.learning_rate,
             total_steps=self.trainer.estimated_stepping_batches,
+            div_factor=5,
         )
         
         return {
