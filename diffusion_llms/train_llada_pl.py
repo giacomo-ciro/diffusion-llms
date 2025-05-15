@@ -520,14 +520,14 @@ def main():
         ModelCheckpoint(
             dirpath=os.path.join(args["output_dir"], 'checkpoints'),
             filename=f'{args["model_type"]}-{{epoch:02d}}-{{val/loss:.4f}}',
-            monitor='val/loss',
+            monitor='train/loss_log_MSE',
             mode='min',
             save_top_k=3
         ),
         
         # Early stopping
         EarlyStopping(
-            monitor='val/loss',
+            monitor='train/loss_log_MSE',
             patience=args["patience"],
             mode='min',
             verbose=True

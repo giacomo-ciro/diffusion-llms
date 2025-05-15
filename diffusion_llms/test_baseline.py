@@ -42,7 +42,6 @@ def step_zero(
             continue
 
         # scores only at masked positions
-        # scores only at masked positions
         masked_scores = eos_scores[b][mask_positions]
 
         # for each percentile, compute and collect threshold
