@@ -43,7 +43,7 @@ class LLaDAEvalHarness(LM):
         gen_length=1024,
         block_length=1024,
         remasking='low_confidence',
-        device="cuda",
+        device="auto",
         **kwargs,
     ):
         '''
@@ -78,14 +78,19 @@ class LLaDAEvalHarness(LM):
         self.model = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=torch.bfloat16, **model_kwargs)
         self.model.eval()
 
-        self.device = torch.device(device)
+        # Set device accordingly
+        if device == "auto":
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = torch.device(device)
+            
         if self.accelerator is not None:
             self.model = self.accelerator.prepare(self.model)
             self.device = torch.device(f'{self.accelerator.device}')
             self._rank = self.accelerator.local_process_index
             self._world_size = self.accelerator.num_processes
         else: 
-            self.model = self.model.to(device)
+            self.model = self.model.to(self.device)
 
         self.mask_id = mask_id
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
