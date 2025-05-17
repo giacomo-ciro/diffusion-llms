@@ -83,6 +83,64 @@ def speed_test_distilbert_reg(n_sequences, verbose=False):
 
 
 
+def speed_test_fixed(n_sequences, max_length, verbose=False):
+    """Test the inference speed of a model."""
+    from diffusion_llms.baseline.model_baseline import DistilBertRegressor
+    device = get_device()
+    ### TODO: create model and tokenizer ###################################
+
+    model = AutoModel.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True, torch_dtype=torch.bfloat16).to(device).eval()
+    tokenizer = AutoTokenizer.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True)    
+
+
+    ########################################################################
+    dataset = pd.read_csv(".diffusion_llms/data/train.csv")
+    prompts = dataset["user_prompt"]
+
+
+    start = time.time()
+
+    n_tokens_generated = 0
+    for i in range(n_sequences):
+        prompt = prompts[i]
+
+        ###### GENERATION OF THE ANSWER ##########################
+
+        # Add special tokens for the Instruct model. The Base model does not require the following two lines.
+        m = [{"role": "user", "content": prompt}, ]
+        prompt = tokenizer.apply_chat_template(m, add_generation_prompt=True, tokenize=False)
+        input_ids = tokenizer(prompt)['input_ids']
+        input_ids = torch.tensor(input_ids).to(device).unsqueeze(0)
+
+        gen_length = max_length
+        # let's do for multiple of 32
+        block_length = 32
+        gen_length = (gen_length // block_length + 1) * block_length        # it shouldn't change anything
+        max_new_tokens = gen_length - input_ids.shape[1]
+        steps = gen_length
+
+        out = generate(model, input_ids, steps=steps, gen_length=gen_length, block_length=block_length, temperature=0., cfg_scale=0., remasking='low_confidence')
+        if verbose:
+            print(tokenizer.batch_decode(out[:, input_ids.shape[1]:], skip_special_tokens=True)[0])
+            # could be interesting to see the position of the eos token
+
+        ############################################################
+
+        n_tokens_generated += max_new_tokens
+
+
+        
+    end = time.time()
+    print(f"Generated {n_sequences} responses, {n_tokens_generated} total tokens, in {end - start:.4f} seconds")
+    print(f"Average time per prompt: {(end - start) / n_sequences:.4f} sec")
+    print(f"Average time per 1000 tokens generated: {1000* (end - start) / (n_tokens_generated):.4f} sec")
+    print(f"Average speed: {n_tokens_generated / (end - start):.4f} tokens/sec")
+
+
+
+
+
+
 
 
 def main():
