@@ -27,6 +27,65 @@ import numpy as np
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
+def csv_to_latex_table(input_file, output_file="eval.tex"):
+    # Read the CSV file
+    df = pd.read_csv(input_file, index_col=0)
+    
+    # Format the index (model names): replace underscores with spaces and capitalize
+    df.index = df.index.map(lambda x: x.replace('_', ' ').title())
+    
+    # Format the LaTeX table with improved appearance
+    latex_code = df.sort_index().to_latex(
+        index=True,
+        float_format=lambda x: f"{x:,.2f}",  # Format with comma for thousands
+        caption="Comparison of Model Performance Metrics",
+        label="tab:model_performance",
+        position="htbp",
+        escape=False,
+        na_rep="-",
+    )
+    
+    # Enhance the LaTeX table with better formatting
+    latex_preamble = r"""\begin{table*}[htbp]
+\centering
+\caption{\textbf{Length Prediction Approaches.} Comparison of different prediction mechanisms used for length estimation and sequence termination.}
+\label{tab:model_performance}
+\begin{tabularx}{\linewidth}{l|YYYYYYY}
+\toprule
+"""
+    
+    # Create the header row with better column names with all titles in bold
+    header = r"\textbf{Model} & \textbf{\% Below} & \textbf{\% Above} & \textbf{\% Exact} & \textbf{\# Tokens Below (avg.)} & \textbf{\# Tokens Above (Avg.)} & \textbf{MSE} \\"
+    
+    # Get the data rows from the original LaTeX output
+    lines = latex_code.split('\n')
+    data_rows = []
+    capture = False
+    
+    for line in lines:
+        if r'\midrule' in line:
+            capture = True
+            continue
+        if r'\bottomrule' in line:
+            capture = False
+            continue
+        if capture and line.strip():
+            data_rows.append(line)
+    
+    # Assemble the enhanced LaTeX table
+    enhanced_latex = (
+        latex_preamble + 
+        header + r" \midrule" + "\n" + 
+        "\n".join(data_rows) + "\n" + 
+        r"\bottomrule" + "\n" + 
+        r"\end{tabularx}" + "\n" + 
+        r"\end{table*}"
+    )
+    
+    with open(output_file, 'w') as f:
+        f.write(enhanced_latex)
+    print(f"LaTeX table saved to {output_file}")
+
 def main():
 
     # dir1/dir2/this_file.py
@@ -51,7 +110,8 @@ def main():
         len(tokenizer(response)["input_ids"])
         for response in df.model_response.dropna()
     ]
-    print(f"Evaluating {len(gt)} test instances...")
+    n_test_samples = len(gt)
+    print(f"Evaluating {n_test_samples} test instances...")
 
     # Get list of pred files
     # all the .npy's in this folder
@@ -84,6 +144,7 @@ def main():
     
     # Sanity check
     for model in preds.keys():
+        print(model)
         assert preds[model].shape == (len(gt),)
     
     # Store results
@@ -142,7 +203,7 @@ def main():
         
         # How many above, below, exact predicted (with avg)
         for k in ["above", "below", "exact"]:
-            ans_df.loc[i, k.capitalize()] = len(ans[model][k]) 
+            ans_df.loc[i, k.capitalize()] = len(ans[model][k]) / n_test_samples * 100
             if k != "exact":
                 ans_df.loc[i, f"{k.capitalize()}_avg"] = np.mean(ans[model][k]).item()
 
@@ -158,7 +219,10 @@ def main():
     print(ans_df.to_string())
 
     # Save it
-    ans_df.to_csv("eval.csv")
+    ans_df.to_csv("eval.csv", index=False)
+
+    # Read the csv back and save to latex
+    csv_to_latex_table("eval.csv")
 
 if __name__=="__main__":
     main()
