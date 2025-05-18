@@ -10,3 +10,5 @@ absl-py
 nltk
 rouge_score
 h5py
+accelerate
+lm_eval
