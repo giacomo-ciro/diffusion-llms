@@ -126,21 +126,6 @@ def main():
         high = np.max(gt),
         size=(len(gt),)
     )
-    mean_ = np.mean(gt).round().item()
-    preds[f"mean_{mean_}"] = np.full(
-        shape=(len(gt),),
-        fill_value=mean_
-    )
-    min_ = np.min(gt).item()
-    preds[f"min_{min_}"] = np.full(
-        shape=(len(gt),),
-        fill_value=min_
-    )
-    max_ = np.max(gt).item()
-    preds[f"max_{max_}"] = np.full(
-        shape=(len(gt),),
-        fill_value=max_
-    )
     
     # Sanity check
     for model in preds.keys():
@@ -152,7 +137,8 @@ def main():
         p:{
             "above":[],
             "below":[],
-            "exact":[]
+            "exact":[],
+            "saved": [] # only when above
         } for p in preds.keys()
     }
 
@@ -175,6 +161,7 @@ def main():
             # Model predicted more than true length (good)
             elif pred > true:
                 k = "above"
+                ans[model]["saved"] = 1024 - pred
             # Model predicted less than true length (bad)
             elif pred < true:
                 k = "below"
@@ -206,14 +193,18 @@ def main():
             ans_df.loc[i, k.capitalize()] = len(ans[model][k]) / n_test_samples * 100
             if k != "exact":
                 ans_df.loc[i, f"{k.capitalize()}_avg"] = np.mean(ans[model][k]).item()
-
-        # Compute mse
-        ans_df.loc[i, "MSE"] = np.mean(
+        
+        # Compute distance from end of context (tokens saved)
+        ans_df.loc[i, "Saved"] = np.mean(ans[model]["saved"])
+        
+        # Compute rmse
+        ans_df.loc[i, "RMSE"] = np.mean(
             np.power(
                 ans[model]["above"] + ans[model]["below"] + ans[model]["exact"],
                 2
-            )
+            ) 
         ).item()
+        ans_df.loc[i, "RMSE"] = np.sqrt(ans_df.loc[i, "RMSE"])
 
     # Print the result
     print(ans_df.to_string())
