@@ -9,6 +9,7 @@ Enhanced visualization features:
 - Focus plots on first N tokens
 - Multi-language comparisons 
 - Can run in visualization-only mode using pre-computed data
+- Improved visualization with better readability
 """
 
 import seaborn as sns
@@ -24,7 +25,23 @@ import argparse
 from scipy import stats
 sys.path.append('.')
 
-from diffusion_llms.models.llada import LladaBackbone
+# Set matplotlib parameters for better visualization
+plt.rcParams['figure.figsize'] = (28, 16)  # Even larger default figure size
+plt.rcParams['font.size'] = 18  # Larger base font size
+plt.rcParams['axes.titlesize'] = 22  # Larger title
+plt.rcParams['axes.labelsize'] = 20  # Larger axis labels
+plt.rcParams['xtick.labelsize'] = 16  # Larger tick labels
+plt.rcParams['ytick.labelsize'] = 16  # Larger tick labels
+plt.rcParams['legend.fontsize'] = 18  # Larger legend text
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.bbox'] = 'tight'  # Tight bounding box for saved figures
+plt.rcParams['savefig.pad_inches'] = 0.5  # Add padding around the figure
+
+# Import conditionally to allow for visualization-only mode
+try:
+    from diffusion_llms.models.llada import LladaBackbone
+except ImportError:
+    print("LladaBackbone import failed. Running in visualization-only mode.")
 
 # Constants
 LANGUAGES = ["english", "italian", "german"]
@@ -200,9 +217,9 @@ def compute_statistics(probs_array):
     }
     return stats_dict
 
-def add_statistics_to_plot(ax, stats_dict, color, alpha_fill=0.2):
+def add_statistics_to_plot(ax, stats_dict, color, alpha_fill=0.2, show_percentiles=False):
     """Add statistical information to an existing plot."""
-    # Add mean +/- std dev range
+    # Add mean +/- std dev range with improved visibility
     ax.fill_between(
         range(len(stats_dict["mean"])),
         stats_dict["mean"] - stats_dict["std"],
@@ -212,26 +229,49 @@ def add_statistics_to_plot(ax, stats_dict, color, alpha_fill=0.2):
         label="±1 std dev"
     )
     
-    # Add 25-75 percentile range with different alpha
-    ax.fill_between(
-        range(len(stats_dict["mean"])),
-        stats_dict["p25"],
-        stats_dict["p75"],
-        alpha=alpha_fill*2,
-        color=color,
-        label="25-75 percentile"
-    )
+    # Add 25-75 percentile range only if explicitly requested
+    if show_percentiles:
+        ax.fill_between(
+            range(len(stats_dict["mean"])),
+            stats_dict["p25"],
+            stats_dict["p75"],
+            alpha=alpha_fill*2.5,  # Increased alpha for better visibility
+            color=color,
+            label="25-75 percentile"
+        )
     
-    # Add annotations for max position
+    # Add enhanced annotations for max position
     max_pos = stats_dict["max_pos"]
     max_val = stats_dict["max_val"]
+    
+    # Intelligently position the annotation based on position in the sequence
+    # to avoid cutoff at edges
+    if max_pos > len(stats_dict["mean"]) * 0.7:
+        # If near right edge, place annotation to the left
+        xytext_pos = (max_pos-80, max_val*1.1)
+    else:
+        # Otherwise place to the right
+        xytext_pos = (max_pos+20, max_val*1.1)
     
     ax.annotate(
         f"Max: {max_val:.2e} @ pos {max_pos}",
         xy=(max_pos, max_val),
-        xytext=(max_pos+20, max_val*1.1),
-        arrowprops=dict(arrowstyle="->", color=color),
-        color=color
+        xytext=xytext_pos,
+        arrowprops=dict(
+            arrowstyle="->", 
+            color=color, 
+            lw=2.5,  # Even thicker arrow
+            connectionstyle="arc3,rad=0.2",  # Curved arrow for better visibility
+            alpha=0.9  # More visible
+        ),
+        color=color,
+        fontsize=16,  # Even larger font
+        bbox=dict(
+            boxstyle="round,pad=0.4", 
+            fc="white", 
+            alpha=0.9, 
+            ec=color
+        )  # Background box
     )
 
 def plot_language_comparison(all_results, prompt_type, focus_first_n=None, output_dir=OUTPUT_DIR):
@@ -243,7 +283,8 @@ def plot_language_comparison(all_results, prompt_type, focus_first_n=None, outpu
         focus_first_n: If set, creates a second plot focusing on first N tokens
         output_dir: Directory to save output plots
     """
-    plt.figure(figsize=(20, 10))
+    # Set explicit parameters for this plot
+    plt.figure(figsize=(30, 18))  # Even larger figure for language comparisons
     sns.set(style="whitegrid")
     
     languages = list(all_results.keys())
@@ -261,35 +302,41 @@ def plot_language_comparison(all_results, prompt_type, focus_first_n=None, outpu
             stats_dict["mean"], 
             label=f"{lang.capitalize()} (mean)",
             color=color,
-            linewidth=2
+            linewidth=4  # Increased line width for better visibility
         )
         
         # Add statistical overlays
-        add_statistics_to_plot(ax, stats_dict, color)
+        add_statistics_to_plot(ax, stats_dict, color, show_percentiles=False)
         
         # Mark maximum position
         argmax_pos = stats_dict["max_pos"]
         max_prob = stats_dict["max_val"]
-        ax.plot(argmax_pos, max_prob, 'o', markersize=8, color=color)
-        ax.axvline(x=argmax_pos, linestyle='--', alpha=0.5, color=color)
+        ax.plot(argmax_pos, max_prob, 'o', markersize=12, color=color)  # Larger marker
+        ax.axvline(x=argmax_pos, linestyle='--', alpha=0.5, color=color, linewidth=2)  # Thicker line
     
-    ax.set_title(f"EOS Probability per Position ({prompt_type.capitalize()} Prompts) - Language Comparison")
-    ax.set_xlabel("Position")
-    ax.set_ylabel("Probability")
+    ax.set_title(f"EOS Probability per Position ({prompt_type.capitalize()} Prompts) - Language Comparison", fontsize=22, pad=20)
+    ax.set_xlabel("Position", fontsize=20, labelpad=15)
+    ax.set_ylabel("Probability", fontsize=20, labelpad=15)
     ax.set_xticks(np.arange(0, SEQ_LEN, step=50))
+    ax.tick_params(axis='both', which='major', labelsize=16)
     ax.set_xlim(0, SEQ_LEN)
     
     # Set y-limit based on maximum probability
     max_probs = [stats["max_val"] for stats in statistics.values()]
     ax.set_ylim(0, 1.2 * max(max_probs))
     
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{prompt_type}_language_comparison.png"))
+    # Create an enhanced legend with better positioning
+    plt.legend(loc='upper left', fontsize=18, framealpha=0.9, frameon=True,
+               facecolor='white', edgecolor='gray', fancybox=True, shadow=True)
+    
+    # Use subplots_adjust instead of tight_layout to prevent warnings
+    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.95, hspace=0.4, wspace=0.3)
+    plt.savefig(os.path.join(output_dir, f"{prompt_type}_language_comparison.png"), 
+               bbox_inches='tight', pad_inches=0.5, dpi=300)
     
     # Create a focused plot if requested
     if focus_first_n is not None and focus_first_n > 0:
-        plt.figure(figsize=(20, 10))
+        plt.figure(figsize=(28, 16))  # Larger figure for focused view
         ax = plt.gca()
         
         for lang in languages:
@@ -303,7 +350,7 @@ def plot_language_comparison(all_results, prompt_type, focus_first_n=None, outpu
                 focused_mean,
                 label=f"{lang.capitalize()} (mean)",
                 color=color,
-                linewidth=2
+                linewidth=4  # Increased line width for better visibility
             )
             
             # Add focused statistics
@@ -317,21 +364,28 @@ def plot_language_comparison(all_results, prompt_type, focus_first_n=None, outpu
                 "max_val": np.max(stats_dict["mean"][:focus_first_n])
             }
             
-            add_statistics_to_plot(ax, focused_stats, color)
+            add_statistics_to_plot(ax, focused_stats, color, show_percentiles=False)
         
-        ax.set_title(f"EOS Probability - First {focus_first_n} Tokens ({prompt_type.capitalize()} Prompts)")
-        ax.set_xlabel("Position")
-        ax.set_ylabel("Probability")
+        ax.set_title(f"EOS Probability - First {focus_first_n} Tokens ({prompt_type.capitalize()} Prompts)", 
+                    fontsize=22, pad=20)
+        ax.set_xlabel("Position", fontsize=20, labelpad=15)
+        ax.set_ylabel("Probability", fontsize=20, labelpad=15)
         ax.set_xticks(np.arange(0, focus_first_n, step=5))
+        ax.tick_params(axis='both', which='major', labelsize=16)
         ax.set_xlim(0, focus_first_n)
         
         # Adjust y-limits for better visualization
         max_focused_probs = [np.max(stats["mean"][:focus_first_n]) for stats in statistics.values()]
         ax.set_ylim(0, 1.2 * max(max_focused_probs))
         
-        plt.legend(loc='upper left')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f"{prompt_type}_language_comparison_first_{focus_first_n}.png"))
+        # Create an enhanced legend
+        plt.legend(loc='upper left', fontsize=18, framealpha=0.9, frameon=True,
+                  facecolor='white', edgecolor='gray', fancybox=True, shadow=True)
+        
+        # Use subplots_adjust instead of tight_layout to prevent warnings
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.95, hspace=0.4, wspace=0.3)
+        plt.savefig(os.path.join(output_dir, f"{prompt_type}_language_comparison_first_{focus_first_n}.png"),
+                   bbox_inches='tight', pad_inches=0.5, dpi=300)
     
     plt.close('all')
     
@@ -344,7 +398,18 @@ def plot_trigger_comparison(all_results, language, focus_first_n=None, output_di
         focus_first_n: If set, creates a second plot focusing on first N tokens
         output_dir: Directory to save output plots
     """
-    plt.figure(figsize=(20, 10))
+    # Reset matplotlib params to ensure consistency
+    plt.rcParams.update({
+        'figure.figsize': (32, 18),  # Extra large figure for language-specific comparisons
+        'font.size': 18,  # Much larger base font size
+        'axes.titlesize': 22, 
+        'axes.labelsize': 20,
+        'xtick.labelsize': 18, 
+        'ytick.labelsize': 18,
+        'legend.fontsize': 18,
+    })
+    
+    plt.figure(figsize=(32, 18))  # Extra large figure for language-specific comparisons
     sns.set(style="whitegrid")
     ax = plt.gca()
     
@@ -358,50 +423,115 @@ def plot_trigger_comparison(all_results, language, focus_first_n=None, output_di
     trig_argmax = trig_stats["max_pos"]
     trig_max = trig_stats["max_val"]
     
-    # Plot mean lines
-    ax.plot(reg_stats["mean"], color=PROMPT_TYPE_COLORS["regular"], linewidth=2,
+    # Calculate position shift and probability difference
+    pos_shift = trig_argmax - reg_argmax
+    prob_diff = trig_max - reg_max
+    reg_mean_prob = np.mean(reg_stats['mean'])
+    trig_mean_prob = np.mean(trig_stats['mean'])
+    
+    # Plot mean lines with increased width for better visibility
+    ax.plot(reg_stats["mean"], color=PROMPT_TYPE_COLORS["regular"], linewidth=4,
             label='Regular Prompts (mean)')
-    ax.plot(trig_stats["mean"], color=PROMPT_TYPE_COLORS["trigger"], linewidth=2,
+    ax.plot(trig_stats["mean"], color=PROMPT_TYPE_COLORS["trigger"], linewidth=4,
             label=f'"{TRIGGER_WORDS[language].capitalize()}" Prompts (mean)')
     
-    # Add statistical overlays
-    add_statistics_to_plot(ax, reg_stats, PROMPT_TYPE_COLORS["regular"])
-    add_statistics_to_plot(ax, trig_stats, PROMPT_TYPE_COLORS["trigger"])
+    # Add statistical overlays without percentile ranges
+    add_statistics_to_plot(ax, reg_stats, PROMPT_TYPE_COLORS["regular"], show_percentiles=False)
+    add_statistics_to_plot(ax, trig_stats, PROMPT_TYPE_COLORS["trigger"], show_percentiles=False)
     
-    # Mark maximums
-    ax.plot(reg_argmax, reg_max, 'o', markersize=8, color=PROMPT_TYPE_COLORS["regular"])
-    ax.plot(trig_argmax, trig_max, 'o', markersize=8, color=PROMPT_TYPE_COLORS["trigger"])
+    # Mark maximums with larger markers
+    ax.plot(reg_argmax, reg_max, 'o', markersize=14, color=PROMPT_TYPE_COLORS["regular"])
+    ax.plot(trig_argmax, trig_max, 'o', markersize=14, color=PROMPT_TYPE_COLORS["trigger"])
     
-    # Add vertical lines
-    ax.axvline(x=reg_argmax, color=PROMPT_TYPE_COLORS["regular"], linestyle='--', 
+    # Add vertical lines with better visibility
+    ax.axvline(x=reg_argmax, color=PROMPT_TYPE_COLORS["regular"], linestyle='--', linewidth=3, alpha=0.7,
               label=f'Regular Max: pos {reg_argmax}, prob {reg_max:.2e}')
-    ax.axvline(x=trig_argmax, color=PROMPT_TYPE_COLORS["trigger"], linestyle='--', 
+    ax.axvline(x=trig_argmax, color=PROMPT_TYPE_COLORS["trigger"], linestyle='--', linewidth=3, alpha=0.7,
               label=f'Trigger Max: pos {trig_argmax}, prob {trig_max:.2e}')
     
-    # Add statistical measures to plot
-    ax.text(0.02, 0.98, 
-           f"Position Shift: {trig_argmax - reg_argmax} tokens\n"
-           f"Probability Diff: {(trig_max - reg_max):.2e}\n"
-           f"Regular Mean: {np.mean(reg_stats['mean']):.2e}\n"
-           f"Trigger Mean: {np.mean(trig_stats['mean']):.2e}",
-           transform=ax.transAxes, 
-           bbox=dict(facecolor='white', alpha=0.8),
-           verticalalignment='top')
+    # Add a shaded region to highlight the shift
+    min_y, max_y = ax.get_ylim()
+    rect_height = max_y * 0.05  # 5% of max height
+    rect_y = max_y * 0.9  # Position at 90% of max height
     
-    ax.set_title(f"EOS Probability Comparison - {language.capitalize()}")
-    ax.set_xlabel("Position")
-    ax.set_ylabel("Probability")
+    # Draw arrow between the max positions
+    if pos_shift != 0:
+        arrow_props = dict(
+            arrowstyle='<->', 
+            lw=2, 
+            color='black',
+            shrinkA=5,
+            shrinkB=5
+        )
+        ax.annotate('', 
+                   xy=(reg_argmax, rect_y + rect_height/2),
+                   xytext=(trig_argmax, rect_y + rect_height/2),
+                   arrowprops=arrow_props)
+        
+        # Add label for the position shift
+        shift_label_pos = (reg_argmax + trig_argmax) / 2
+        ax.text(shift_label_pos, rect_y + rect_height*2,
+               f"Position Shift: {pos_shift} tokens",
+               ha='center', va='bottom', fontsize=14,
+               bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9))
+    
+    # Add enhanced statistical measures to plot
+    stats_info = (
+        f"Position Shift: {pos_shift} tokens\n"
+        f"Probability Diff: {prob_diff:.2e}\n"
+        f"Regular Max: pos {reg_argmax}, prob {reg_max:.2e}\n"
+        f"Trigger Max: pos {trig_argmax}, prob {trig_max:.2e}\n"
+        f"Regular Mean: {reg_mean_prob:.2e}\n"
+        f"Trigger Mean: {trig_mean_prob:.2e}"
+    )
+    
+    # Position stats box in a better location based on language
+    # For German and Italian which had cutoff issues, position differently
+    if language in ["german", "italian"]:
+        # Position in top right for languages that had cutoff issues
+        stats_box_x, stats_box_y = 0.7, 0.98
+    else:
+        # Position in top left for other languages
+        stats_box_x, stats_box_y = 0.02, 0.98
+        
+    ax.text(stats_box_x, stats_box_y, stats_info,
+           transform=ax.transAxes, 
+           bbox=dict(facecolor='white', alpha=0.9, boxstyle="round,pad=0.5", 
+                   edgecolor="gray", linewidth=2),  # Thicker border
+           verticalalignment='top',
+           fontsize=18)
+    
+    # Create a title with the trigger word highlighted
+    title = f"EOS Probability Comparison - {language.capitalize()} - Trigger Word: \"{TRIGGER_WORDS[language].capitalize()}\""
+    ax.set_title(title, fontsize=22, pad=20)  # More padding to avoid overlap
+    ax.set_xlabel("Position", fontsize=20, labelpad=15)
+    ax.set_ylabel("Probability", fontsize=20, labelpad=15)
     ax.set_xticks(np.arange(0, SEQ_LEN, step=50))
+    ax.tick_params(axis='both', which='major', labelsize=16)
     ax.set_xlim(0, SEQ_LEN)
     ax.set_ylim(0, 1.2 * max(reg_max, trig_max))
     
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{language}_trigger_comparison.png"))
+    # Add grid for better readability
+    ax.grid(True, linestyle='--', alpha=0.7)
+    
+    # Create an enhanced legend with better positioning
+    # For German and Italian, place the legend in a different location
+    if language in ["german", "italian"]:
+        legend_loc = 'upper center'  # Move legend to center to avoid overlap with stats box
+    else:
+        legend_loc = 'upper left'
+        
+    plt.legend(loc=legend_loc, fontsize=18, framealpha=0.9, frameon=True, 
+               facecolor='white', edgecolor='gray', fancybox=True, shadow=True)
+    
+    # Use subplots_adjust instead of tight_layout to prevent warnings
+    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.95, hspace=0.4, wspace=0.3)
+    plt.savefig(os.path.join(output_dir, f"{language}_trigger_comparison.png"), 
+               bbox_inches='tight', pad_inches=0.5, dpi=300)  # Ensure nothing gets cut off
     
     # Create focused plot if requested
     if focus_first_n is not None and focus_first_n > 0:
-        plt.figure(figsize=(20, 10))
+        plt.figure(figsize=(24, 14))
         ax = plt.gca()
         
         # Get focused ranges
@@ -427,32 +557,90 @@ def plot_trigger_comparison(all_results, language, focus_first_n=None, output_di
             "max_val": np.max(trig_mean_focus)
         }
         
+        # Calculate focused position shift
+        focus_pos_shift = trig_stats_focus["max_pos"] - reg_stats_focus["max_pos"]
+        focus_prob_diff = trig_stats_focus["max_val"] - reg_stats_focus["max_val"]
+        
         # Plot focused means
         ax.plot(range(focus_first_n), reg_mean_focus, 
-               color=PROMPT_TYPE_COLORS["regular"], linewidth=2,
+               color=PROMPT_TYPE_COLORS["regular"], linewidth=3,
                label='Regular Prompts (mean)')
         ax.plot(range(focus_first_n), trig_mean_focus, 
-               color=PROMPT_TYPE_COLORS["trigger"], linewidth=2,
+               color=PROMPT_TYPE_COLORS["trigger"], linewidth=3,
                label=f'"{TRIGGER_WORDS[language].capitalize()}" Prompts (mean)')
         
-        # Add statistical overlays
-        add_statistics_to_plot(ax, reg_stats_focus, PROMPT_TYPE_COLORS["regular"])
-        add_statistics_to_plot(ax, trig_stats_focus, PROMPT_TYPE_COLORS["trigger"])
+        # Add statistical overlays for the focused view
+        add_statistics_to_plot(ax, reg_stats_focus, PROMPT_TYPE_COLORS["regular"], show_percentiles=False)
+        add_statistics_to_plot(ax, trig_stats_focus, PROMPT_TYPE_COLORS["trigger"], show_percentiles=False)
         
-        # Set labels and title
-        ax.set_title(f"EOS Probability - First {focus_first_n} Tokens - {language.capitalize()}")
-        ax.set_xlabel("Position")
-        ax.set_ylabel("Probability")
+        # Mark focused maximums
+        ax.plot(reg_stats_focus["max_pos"], reg_stats_focus["max_val"], 
+               'o', markersize=10, color=PROMPT_TYPE_COLORS["regular"])
+        ax.plot(trig_stats_focus["max_pos"], trig_stats_focus["max_val"], 
+               'o', markersize=10, color=PROMPT_TYPE_COLORS["trigger"])
+        
+        # Add vertical lines for focused view
+        ax.axvline(x=reg_stats_focus["max_pos"], color=PROMPT_TYPE_COLORS["regular"], 
+                  linestyle='--', linewidth=2, alpha=0.7)
+        ax.axvline(x=trig_stats_focus["max_pos"], color=PROMPT_TYPE_COLORS["trigger"], 
+                  linestyle='--', linewidth=2, alpha=0.7)
+        
+        # Add statistical measures for focused view
+        focused_stats_info = (
+            f"Position Shift: {focus_pos_shift} tokens\n"
+            f"Probability Diff: {focus_prob_diff:.2e}\n"
+            f"Regular Max: pos {reg_stats_focus['max_pos']}, prob {reg_stats_focus['max_val']:.2e}\n"
+            f"Trigger Max: pos {trig_stats_focus['max_pos']}, prob {trig_stats_focus['max_val']:.2e}\n"
+            f"Regular Mean: {np.mean(reg_mean_focus):.2e}\n"
+            f"Trigger Mean: {np.mean(trig_mean_focus):.2e}"
+        )
+        
+        # Position stats box in a better location based on language
+        # For German and Italian which had cutoff issues, position differently
+        if language in ["german", "italian"]:
+            # Position in top right for languages that had cutoff issues
+            stats_box_x, stats_box_y = 0.7, 0.98
+        else:
+            # Position in top left for other languages
+            stats_box_x, stats_box_y = 0.02, 0.98
+            
+        ax.text(stats_box_x, stats_box_y, focused_stats_info,
+               transform=ax.transAxes, 
+               bbox=dict(facecolor='white', alpha=0.9, boxstyle="round,pad=0.5", 
+                       edgecolor="gray", linewidth=2),  # Thicker border
+               verticalalignment='top',
+               fontsize=16)  # Larger font size
+        
+        # Set labels and title for focused view
+        title = f"EOS Probability - First {focus_first_n} Tokens - {language.capitalize()} - Trigger: \"{TRIGGER_WORDS[language].capitalize()}\""
+        ax.set_title(title, fontsize=20, pad=20)  # More padding to avoid overlap
+        ax.set_xlabel("Position", fontsize=18, labelpad=15)
+        ax.set_ylabel("Probability", fontsize=18, labelpad=15)
         ax.set_xticks(np.arange(0, focus_first_n, step=5))
+        ax.tick_params(axis='both', which='major', labelsize=14)
         ax.set_xlim(0, focus_first_n)
+        
+        # Add grid for better readability in focused view
+        ax.grid(True, linestyle='--', alpha=0.7)
         
         # Set y-limit for focused view
         max_focused = max(np.max(reg_mean_focus), np.max(trig_mean_focus))
         ax.set_ylim(0, 1.2 * max_focused)
         
-        plt.legend(loc='upper left')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f"{language}_trigger_comparison_first_{focus_first_n}.png"))
+        # Create an enhanced legend for focused view with better positioning
+        # For German and Italian, place the legend in a different location
+        if language in ["german", "italian"]:
+            legend_loc = 'upper center'  # Move legend to center to avoid overlap with stats box
+        else:
+            legend_loc = 'upper left'
+            
+        plt.legend(loc=legend_loc, fontsize=16, framealpha=0.9, frameon=True, 
+                  facecolor='white', edgecolor='gray', fancybox=True, shadow=True)
+        
+        # Use subplots_adjust instead of tight_layout to prevent warnings
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.95, hspace=0.4, wspace=0.3)
+        plt.savefig(os.path.join(output_dir, f"{language}_trigger_comparison_first_{focus_first_n}.png"), 
+                   bbox_inches='tight', pad_inches=0.5, dpi=300)
     
     plt.close('all')
     
@@ -466,7 +654,7 @@ def plot_pointwise_difference(all_results, focus_first_n=None, output_dir=OUTPUT
         focus_first_n: If set, creates a second plot focusing on first N tokens
         output_dir: Directory to save output plots
     """
-    plt.figure(figsize=(20, 10))
+    plt.figure(figsize=(28, 16))  # Larger figure for pointwise difference plot
     sns.set(style="whitegrid")
     ax = plt.gca()
     
@@ -499,7 +687,7 @@ def plot_pointwise_difference(all_results, focus_first_n=None, output_dir=OUTPUT
         
         # Plot the difference with language-specific color
         color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
-        ax.plot(diff, label=f"{lang.capitalize()}", color=color, linewidth=2)
+        ax.plot(diff, label=f"{lang.capitalize()}", color=color, linewidth=4)
         
         # Add annotations for max and min differences
         ax.annotate(
@@ -530,13 +718,16 @@ def plot_pointwise_difference(all_results, focus_first_n=None, output_dir=OUTPUT
     
     ax.text(0.02, 0.98, stat_text,
            transform=ax.transAxes, 
-           bbox=dict(facecolor='white', alpha=0.8),
-           verticalalignment='top')
+           bbox=dict(facecolor='white', alpha=0.9, boxstyle="round,pad=0.5", 
+                    edgecolor="gray", linewidth=2),  # Improved text box
+           verticalalignment='top',
+           fontsize=16)
     
-    ax.set_title("Pointwise Difference in EOS Probabilities (Trigger - Regular)")
-    ax.set_xlabel("Position")
-    ax.set_ylabel("Probability Difference")
+    ax.set_title("Pointwise Difference in EOS Probabilities (Trigger - Regular)", fontsize=22, pad=20)
+    ax.set_xlabel("Position", fontsize=20, labelpad=15)
+    ax.set_ylabel("Probability Difference", fontsize=20, labelpad=15)
     ax.set_xticks(np.arange(0, SEQ_LEN, step=50))
+    ax.tick_params(axis='both', which='major', labelsize=16)
     ax.set_xlim(0, SEQ_LEN)
     
     # Set y-limits to make the zero line centered
@@ -560,7 +751,7 @@ def plot_pointwise_difference(all_results, focus_first_n=None, output_dir=OUTPUT
             
             # Plot focused difference
             ax.plot(range(focus_first_n), focused_diff, 
-                  label=f"{lang.capitalize()}", color=color, linewidth=2)
+                  label=f"{lang.capitalize()}", color=color, linewidth=4)
             
             # Calculate statistics for the focused region
             max_diff_focus = np.max(focused_diff)
@@ -617,7 +808,18 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
         output_dir: Directory to save output plots
         show_avg_median: If True, also show vertical lines for average and median positions
     """
-    plt.figure(figsize=(22, 12))
+    # Reset matplotlib params to ensure consistency 
+    plt.rcParams.update({
+        'figure.figsize': (32, 18),  # Extra large figure for combined comparison
+        'font.size': 16,  # Larger font
+        'axes.titlesize': 22, 
+        'axes.labelsize': 20,
+        'xtick.labelsize': 16, 
+        'ytick.labelsize': 16,
+        'legend.fontsize': 16,
+    })
+    
+    plt.figure(figsize=(32, 18))  # Extra large figure to fit all languages
     sns.set(style="whitegrid")
     ax = plt.gca()
     
@@ -627,6 +829,9 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
     max_positions = {}
     avg_positions = {}
     median_positions = {}
+    
+    # Statistical summary data
+    summary_data = []
     
     # Plot each language and prompt type combination
     for lang in languages:
@@ -642,7 +847,7 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                 stats["mean"], 
                 linestyle=ls,
                 color=color,
-                linewidth=2,
+                linewidth=3,  # Increased line width for better visibility
                 label=f"{lang.capitalize()} ({prompt_type})"
             )
             
@@ -653,7 +858,7 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
             
             # Mark the max with a dot
             marker = 'o' if prompt_type == "regular" else 's'
-            ax.plot(max_pos, max_val, marker=marker, markersize=8, color=color)
+            ax.plot(max_pos, max_val, marker=marker, markersize=10, color=color)  # Increased marker size
             
             # Calculate average and median positions
             if show_avg_median:
@@ -664,6 +869,17 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                 # Median position of max probabilities across samples
                 median_pos = np.median(np.argmax(all_results[lang][prompt_type], axis=1))
                 median_positions[f"{lang}_{prompt_type}"] = {"pos": median_pos, "val": stats["mean"][int(median_pos)]}
+            
+            # Collect summary data
+            summary_data.append({
+                "Language": lang.capitalize(),
+                "Type": prompt_type.capitalize(),
+                "Max Position": int(max_pos),
+                "Max Value": f"{max_val:.6f}",
+                "Avg Position": int(avg_pos) if show_avg_median else "N/A",
+                "Median Position": int(median_pos) if show_avg_median else "N/A",
+                "Mean Probability": f"{np.mean(stats['mean']):.6f}"
+            })
     
     # Add vertical lines at max positions
     for key, data in max_positions.items():
@@ -671,7 +887,7 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
         ls = '-' if prompt_type == "regular" else '--'
         color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
         
-        ax.axvline(x=data["pos"], color=color, linestyle=ls, alpha=0.3)
+        ax.axvline(x=data["pos"], color=color, linestyle=ls, alpha=0.4)
     
     # Add vertical lines for average positions if requested
     if show_avg_median:
@@ -682,14 +898,35 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
             # Dotted line for average position
             ax.axvline(x=data["pos"], color=color, linestyle=':', alpha=0.7)
             
-            # Add annotation for average position
+            # Add annotation for average position with intelligent positioning
+            # Offset positions for Italian and German to avoid overlap with other annotations
+            offset_x = 10
+            offset_y_factor = 0.1
+            
+            # Handle special cases for German and Italian which had issues with cutoff
+            if lang in ["german", "italian"]:
+                # Adjust position based on language to avoid overlap
+                if lang == "german":
+                    offset_x = -30 if prompt_type == "regular" else 30
+                    offset_y_factor = 0.15
+                elif lang == "italian":
+                    offset_x = -25 if prompt_type == "trigger" else 25
+                    offset_y_factor = 0.12
+            
             ax.annotate(
                 f"{lang.capitalize()} {prompt_type} avg",
                 xy=(data["pos"], data["val"]),
-                xytext=(data["pos"] + 10, data["val"] + 0.1 * data["val"]),
-                arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
+                xytext=(data["pos"] + offset_x, data["val"] + offset_y_factor * data["val"]),
+                arrowprops=dict(
+                    arrowstyle="->", 
+                    color=color, 
+                    alpha=0.7, 
+                    lw=2,
+                    connectionstyle="arc3,rad=0.2"  # Curved arrow for better visibility
+                ),
                 color=color,
-                fontsize=8
+                fontsize=14,  # Larger font
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9, ec=color)  # Background box with border color
             )
         
         # Add vertical lines for median positions
@@ -700,39 +937,85 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
             # Dash-dotted line for median position
             ax.axvline(x=data["pos"], color=color, linestyle='-.', alpha=0.7)
             
-            # Add annotation for median position
+            # Add annotation for median position with intelligent positioning
+            # Offset positions for Italian and German to avoid overlap with other annotations
+            offset_x = -10
+            offset_y_factor = -0.2
+            
+            # Handle special cases for German and Italian which had issues with cutoff
+            if lang in ["german", "italian"]:
+                # Adjust position based on language to avoid overlap
+                if lang == "german": 
+                    offset_x = 35 if prompt_type == "regular" else -35
+                    offset_y_factor = -0.25
+                elif lang == "italian":
+                    offset_x = 30 if prompt_type == "trigger" else -30
+                    offset_y_factor = -0.22
+            
             ax.annotate(
                 f"{lang.capitalize()} {prompt_type} med",
                 xy=(data["pos"], data["val"]),
-                xytext=(data["pos"] - 10, data["val"] - 0.2 * data["val"]),
-                arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
+                xytext=(data["pos"] + offset_x, data["val"] + offset_y_factor * data["val"]),
+                arrowprops=dict(
+                    arrowstyle="->", 
+                    color=color, 
+                    alpha=0.7, 
+                    lw=2,
+                    connectionstyle="arc3,rad=-0.2"  # Curved arrow in opposite direction from avg
+                ),
                 color=color,
-                fontsize=8
+                fontsize=14,  # Larger font
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9, ec=color)  # Background box with border color
             )
     
-    ax.set_title(f"Combined EOS Probability Comparison - All Languages & Prompt Types")
-    ax.set_xlabel("Position")
-    ax.set_ylabel("Probability")
+    # Add statistical summary table with better styling
+    table_text = "Statistical Summary:\n"
+    for item in summary_data:
+        table_text += f"{item['Language']} ({item['Type']}): Max @ pos {item['Max Position']} ({item['Max Value']}), "
+        if show_avg_median:
+            table_text += f"Avg pos: {item['Avg Position']}, Med pos: {item['Median Position']}, "
+        table_text += f"Mean prob: {item['Mean Probability']}\n"
+    
+    # Place the summary in a text box above the plot with improved styling
+    props = dict(boxstyle='round', facecolor='white', alpha=0.95, edgecolor='gray', linewidth=2)
+    ax.text(0.5, 1.05, table_text, transform=ax.transAxes, fontsize=16,
+            verticalalignment='bottom', horizontalalignment='center',
+            bbox=props)
+    
+    ax.set_title(f"Combined EOS Probability Comparison - All Languages & Prompt Types", 
+                fontsize=22, pad=100)  # Extra padding for title to make room for summary table
+    ax.set_xlabel("Position", fontsize=20, labelpad=15)
+    ax.set_ylabel("Probability", fontsize=20, labelpad=15)
     ax.set_xticks(np.arange(0, SEQ_LEN, step=50))
+    ax.tick_params(axis='both', which='major', labelsize=16)  # Larger tick labels
     ax.set_xlim(0, SEQ_LEN)
     
     # Find overall maximum for y-limit
     all_max_vals = [data["val"] for data in max_positions.values()]
     ax.set_ylim(0, 1.2 * max(all_max_vals))
     
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "combined_comparison.png"))
+    # Add grid for better readability
+    ax.grid(True, linestyle='--', alpha=0.7)
+    
+    # Create a larger and more prominent legend with better positioning
+    plt.legend(loc='upper left', fontsize=16, framealpha=0.9, frameon=True, 
+               facecolor='white', edgecolor='gray', fancybox=True, shadow=True)
+    
+    plt.tight_layout(pad=3.0)  # Add extra padding
+    plt.subplots_adjust(top=0.85, bottom=0.1, left=0.1, right=0.95)  # Make room for the summary table and adjust margins
+    plt.savefig(os.path.join(output_dir, "combined_comparison.png"), 
+               bbox_inches='tight', pad_inches=0.5, dpi=300)  # Ensure nothing gets cut off
     
     # Create focused plot if requested
     if focus_first_n is not None and focus_first_n > 0:
-        plt.figure(figsize=(22, 12))
+        plt.figure(figsize=(24, 14))
         ax = plt.gca()
         
         # Dictionary to store focused positions
         focused_max_positions = {}
         focused_avg_positions = {}
         focused_median_positions = {}
+        focused_summary_data = []
         
         for lang in languages:
             for prompt_type in ["regular", "trigger"]:
@@ -749,7 +1032,7 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                     mean_vals, 
                     linestyle=ls,
                     color=color,
-                    linewidth=2,
+                    linewidth=3,  # Thicker line
                     label=f"{lang.capitalize()} ({prompt_type})"
                 )
                 
@@ -759,7 +1042,7 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                 focused_max_positions[f"{lang}_{prompt_type}"] = {"pos": max_pos_focus, "val": max_val_focus}
                 
                 marker = 'o' if prompt_type == "regular" else 's'
-                ax.plot(max_pos_focus, max_val_focus, marker=marker, markersize=8, color=color)
+                ax.plot(max_pos_focus, max_val_focus, marker=marker, markersize=10, color=color)  # Larger marker
                 
                 # Calculate average and median positions within the focused region
                 if show_avg_median:
@@ -779,6 +1062,17 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                         "pos": median_pos_focus,
                         "val": mean_vals[int(median_pos_focus)]
                     }
+                
+                # Collect focused summary data
+                focused_summary_data.append({
+                    "Language": lang.capitalize(),
+                    "Type": prompt_type.capitalize(),
+                    "Max Position": int(max_pos_focus),
+                    "Max Value": f"{max_val_focus:.6f}",
+                    "Avg Position": int(avg_pos_focus) if show_avg_median and 'avg_pos_focus' in locals() else "N/A",
+                    "Median Position": int(median_pos_focus) if show_avg_median else "N/A",
+                    "Mean Probability": f"{np.mean(mean_vals):.6f}"
+                })
         
         # Add vertical lines for maximum positions in focused view
         for key, data in focused_max_positions.items():
@@ -786,7 +1080,7 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
             ls = '-' if prompt_type == "regular" else '--'
             color = LANGUAGE_COLORS.get(lang, f"C{languages.index(lang)}")
             
-            ax.axvline(x=data["pos"], color=color, linestyle=ls, alpha=0.3)
+            ax.axvline(x=data["pos"], color=color, linestyle=ls, alpha=0.4)
         
         # Add vertical lines and annotations for average and median positions if requested
         if show_avg_median:
@@ -797,16 +1091,35 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                 # Dotted line for average position
                 ax.axvline(x=data["pos"], color=color, linestyle=':', alpha=0.7)
                 
-                # Add annotation (only if not too crowded)
-                if lang == languages[0] or len(languages) <= 2:  # Only annotate first language or if we have 2 or fewer languages
-                    ax.annotate(
-                        f"{lang} {prompt_type} avg",
-                        xy=(data["pos"], data["val"]),
-                        xytext=(data["pos"] + 1, data["val"] + 0.1 * data["val"]),
-                        arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
-                        color=color,
-                        fontsize=8
-                    )
+                # Add annotation for average position with intelligent positioning
+                # For focused view, use smaller offsets but similar logic
+                offset_x = 2
+                offset_y_factor = 0.1
+                
+                # Handle special cases for German and Italian which had issues with cutoff
+                if lang in ["german", "italian"]:
+                    if lang == "german":
+                        offset_x = -4 if prompt_type == "regular" else 4
+                        offset_y_factor = 0.15
+                    elif lang == "italian":
+                        offset_x = -3 if prompt_type == "trigger" else 3
+                        offset_y_factor = 0.12
+                        
+                ax.annotate(
+                    f"{lang.capitalize()} {prompt_type} avg",
+                    xy=(data["pos"], data["val"]),
+                    xytext=(data["pos"] + offset_x, data["val"] + offset_y_factor * data["val"]),
+                    arrowprops=dict(
+                        arrowstyle="->", 
+                        color=color, 
+                        alpha=0.7, 
+                        lw=2,
+                        connectionstyle="arc3,rad=0.2"
+                    ),
+                    color=color,
+                    fontsize=12,
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9, ec=color)
+                )
             
             for key, data in focused_median_positions.items():
                 lang, prompt_type = key.split('_')
@@ -815,31 +1128,73 @@ def plot_combined_comparison(all_results, focus_first_n=None, output_dir=OUTPUT_
                 # Dash-dotted line for median position
                 ax.axvline(x=data["pos"], color=color, linestyle='-.', alpha=0.7)
                 
-                # Add annotation (only if not too crowded)
-                if lang == languages[-1] or len(languages) <= 2:  # Only annotate last language or if we have 2 or fewer languages
-                    ax.annotate(
-                        f"{lang} {prompt_type} med",
-                        xy=(data["pos"], data["val"]),
-                        xytext=(data["pos"] - 1, data["val"] - 0.2 * data["val"]),
-                        arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
-                        color=color,
-                        fontsize=8
-                    )
+                # Add annotation for median position with intelligent positioning
+                # For focused view, use smaller offsets
+                offset_x = -2
+                offset_y_factor = -0.2
+                
+                # Handle special cases for German and Italian which had issues with cutoff
+                if lang in ["german", "italian"]:
+                    if lang == "german":
+                        offset_x = 4 if prompt_type == "regular" else -4
+                        offset_y_factor = -0.25
+                    elif lang == "italian":
+                        offset_x = 3 if prompt_type == "trigger" else -3
+                        offset_y_factor = -0.22
+                
+                ax.annotate(
+                    f"{lang.capitalize()} {prompt_type} med",
+                    xy=(data["pos"], data["val"]),
+                    xytext=(data["pos"] + offset_x, data["val"] + offset_y_factor * data["val"]),
+                    arrowprops=dict(
+                        arrowstyle="->", 
+                        color=color, 
+                        alpha=0.7, 
+                        lw=2,
+                        connectionstyle="arc3,rad=-0.2"
+                    ),
+                    color=color,
+                    fontsize=12,
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9, ec=color)
+                )
         
-        ax.set_title(f"Combined EOS Probability - First {focus_first_n} Tokens")
-        ax.set_xlabel("Position")
-        ax.set_ylabel("Probability")
+        # Add statistical summary table for focused view
+        focused_table_text = f"Statistical Summary (First {focus_first_n} Tokens):\n"
+        for item in focused_summary_data:
+            focused_table_text += f"{item['Language']} ({item['Type']}): Max @ pos {item['Max Position']} ({item['Max Value']}), "
+            if show_avg_median:
+                focused_table_text += f"Avg pos: {item['Avg Position']}, Med pos: {item['Median Position']}, "
+            focused_table_text += f"Mean prob: {item['Mean Probability']}\n"
+        
+        # Place the summary in a text box with improved styling
+        props = dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='gray', linewidth=2)
+        ax.text(0.5, 1.04, focused_table_text, transform=ax.transAxes, fontsize=14,
+                verticalalignment='bottom', horizontalalignment='center',
+                bbox=props)
+        
+        ax.set_title(f"Combined EOS Probability - First {focus_first_n} Tokens", fontsize=22, pad=80)
+        ax.set_xlabel("Position", fontsize=20, labelpad=15)
+        ax.set_ylabel("Probability", fontsize=20, labelpad=15)
         ax.set_xticks(np.arange(0, focus_first_n, step=5))
+        ax.tick_params(axis='both', which='major', labelsize=16)
         ax.set_xlim(0, focus_first_n)
+        
+        # Add grid for better readability
+        ax.grid(True, linestyle='--', alpha=0.7)
         
         # Find max value in the focused region for all plots
         all_max = max([np.max(np.mean(all_results[lang][pt], axis=0)[:focus_first_n]) 
                      for lang in languages for pt in ["regular", "trigger"]])
         ax.set_ylim(0, 1.2 * all_max)
         
-        plt.legend(loc='upper left')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f"combined_comparison_first_{focus_first_n}.png"))
+        # Create a larger and more prominent legend with better positioning
+        plt.legend(loc='upper left', fontsize=16, framealpha=0.9, frameon=True, 
+                  facecolor='white', edgecolor='gray', fancybox=True, shadow=True)
+        
+        plt.tight_layout(pad=3.0)  # Extra padding to prevent cutoff
+        plt.subplots_adjust(top=0.85, bottom=0.1, left=0.1, right=0.95)  # Make room for the summary table and adjust margins
+        plt.savefig(os.path.join(output_dir, f"combined_comparison_first_{focus_first_n}.png"), 
+                   bbox_inches='tight', pad_inches=0.5, dpi=300)  # Ensure nothing gets cut off
     
     plt.close('all')
 
