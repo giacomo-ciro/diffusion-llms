@@ -1,136 +1,93 @@
-# Diffusion LLMs
+# More Efficient Text Diffusion via Length Prediction
 
 Davide Beltrame, Giacomo Cirò, Luca Gandolfi, Vittorio Rossi
 
 ## Abstract
 
-  Diffusion language models (DLMs) offer faster inference than autoregressive methods. We present a more efficient approach for variable-length text generation with LLaDa, an 8B-parameter DLM. Instead of generating fixed-size blocks until an EOS token, our method predicts an upper bound on output length from the input context, allowing truncation to the nearest power of two. This reduces unnecessary tokens and can reduce computational overhead compared to block-based strategies depending on the generation setup. We evaluate both length prediction accuracy and downstream performance under this new paradigm. *We propose a benchmark for evaluating the upper bound on the EoS classification.*
+Diffusion language models (DLMs) offer a promising alternative to autoregressive models (ARMs) for text generation, but their fixed-length decoding process leads to significant computational inefficiencies. In this work, we address this limitation by predicting an upper bound to the output sequence length before generation begins and reduce the context window to be processed accordingly. Our approach relies solely on the internal representations of the model and explores both zero-shot and embedding-based techniques. When considering a state-of-the-art DLM, LLaDa-8B, a token-level classifier built on top of the encoded token embeddings successfully predicts an upper bound to the sequence length 80% of the times and better avoids underestimation compared to a DistilBERT-based baseline. Our results show that output length prediction is an effective and lightweight strategy to improve DLM efficiency, enabling significant computational savings with minimal overhead.
 
 ## Overview
 
-The authors of the DiffuGPT paper adapted an Autoregressive Language Model (ARM), namely GPT-2, to obtain a Diffusion Language Model (DLM) while leveraging the pre-trained weights with almost no loss in performance. 
+Language generation with Large Language Models (LLMs) has traditionally been dominated by autoregressive models (ARMs), which generate text one token at a time. While effective, their sequential nature limits inference speed. Diffusion Language Models (DLMs) have emerged as a promising alternative, offering potential for faster generation through a denoising process.
 
-However, they did not address the issue of fixed output length which comes with discrete diffusion. In fact, DiffuGPT is only capable of generating output whose length is the full diffusion context size, which is not always the best choice and can also hinder performance in some cases. For example, in the case of a yes/no question, the model is forced to generate a full 512 tokens output, even if the answer is only 2 tokens long.
+DLMs operate by iteratively unmasking a sequence of tokens, where initial tokens represent the prompt and remaining ones are placeholder mask tokens, revealed progressively. At each denoising step, the model predicts logits for the full masked sequence and only unmasks tokens when confident. The context length must be fixed at the start, and DLMs handle variable length output by appending special end-of-sentence (EoS) tokens after the end of the sentence. This approach is effective, but computationally inefficient: the entire context window must be processed during each forward call of the denoising process, regardless of output length.
 
-In this project, we aim to further improve DiffuGPT, making it capable of variable length generation.
+In this work, we focus on LLaDa, Large Language Diffusion with mAsking, an 8-B-parameter DLM, and propose methods to predict an upper bound for the generated sequence length at the initial stage of the denoising process, restricting the effective context to this predicted window and reducing unnecessary computations.
 
-First, we test an approach similar to the one proposed in the Llada paper: we continue pre-training with a custom dataset of [text + eos + pad], to give DiffuGPT the ability to generate a pad token, allowing it to limit the length of its ouput.
+### Core Contributions
 
-Then, we test how confident our model is in predicting the EoS token at the first step of the diffusion generation, which is fundamental to avoid computing all the subsequent pad tokens.
+Our key contributions involve developing techniques to predict output length efficiently:
 
-Finally, we propose a method to improve the model capacity of predicting the EoS token: fine-tuning on [text + mask + EoS + mask] examples to improve the model's accuracy in predicting the eos token at the first diffusion step by only looking at the provided context.
+1. **Zero-shot Length Prediction**: We analyze the model's internal signals by examining the logits corresponding to the EoS token in a zero-shot fashion.
 
----
-
-We implement and extend Diffusion Language Models (DLMs), focusing on improving variable-length text generation efficiency. DLMs offer significant advantages over traditional autoregressive language models, particularly in terms of inference speed, but face challenges with fixed-output length constraints.
-
-### Core Concepts
-
-**DiffuGPT Extension**: We build upon the DiffuGPT approach, which adapts GPT-2 to create a Diffusion Language Model while preserving performance. However, DiffuGPT generates fixed-length outputs regardless of content needs, wasting computational resources.
-
-**Variable-Length Generation**: Our key innovation is implementing efficient variable-length generation for diffusion models through:
-
-1. **EOS Token Prediction**: Developing models that can accurately predict the appropriate End-of-Sequence (EOS) token position early in the diffusion process
-2. **Early Termination**: Implementing techniques to stop the diffusion process once meaningful content has been generated
-3. **Length Prediction**: Incorporating length prediction models to estimate required output length based on input prompts
+2. **Embedding-based Methods**: We develop:
+   - A regression model using average prompt embeddings
+   - A token-wise classification approach to identify EoS tokens
+   
+3. **Comparative Analysis**: We compare our methods against DistilBERT-based baselines, evaluating them on their ability to provide accurate upper bounds that avoid underestimating sequence lengths.
 
 ### Implementation Approaches
 
-We explore multiple methods for improving EOS prediction:
+We explore the following methods for output length prediction:
 
-1. **Fine-tuning with [text + EOS + PAD]**: Training models to recognize padding patterns and generate EOS tokens at appropriate positions
-2. **EOS Classification**: Developing specialized classification heads to predict EOS placement
-3. **Length Regression**: Using regression models to predict output sequence lengths directly from input contexts
-4. **DistilBERT Adaptation**: Leveraging pre-trained language models to predict output lengths from input prompts
+1. **Logit Quantile Heuristic**: A zero-shot approach analyzing token-wise logit distributions for the EoS token
+2. **Embeddings-based Regression**: A neural network trained on prompt embeddings to predict output length
+3. **Token-wise Classification**: A classifier trained to identify which tokens are likely to be EoS tokens
+4. **DistilBERT Methods**: Classification and regression models using DistilBERT's representations
 
 ### Evaluation Framework
 
-Our comprehensive evaluation system measures both:
+Our evaluation framework focuses on the quality of upper bounds provided by each method:
 
-1. **Accuracy**: How well models predict appropriate sequence lengths and EOS positions
-2. **Performance**: Assessing generation quality on standard language model benchmarks
+1. **Bound Correctness**: Percentage of test samples for which a correct upper bound is estimated
+2. **Bound Tightness**: Average number of tokens from true end of sequence to estimated end
+3. **Saved Tokens**: Average number of tokens saved from estimated end to context window end
+4. **Root MSE**: Square root of mean squared error between predicted and true sequence length
 
-The evaluation framework in `evaluation/` includes:
-- `eval_eos.py`: Focused on EOS token prediction accuracy
-- [REMOVE] `eval_test.py`: Comprehensive testing across various language understanding benchmarks
-- `eval.py`: General evaluation pipeline for diffusion models
+We prioritize methods that tend to overestimate rather than underestimate sequence lengths, as overestimation is safer for generation quality.
 
-This work represents a significant step toward more efficient and practical diffusion language models for real-world applications where output length varies significantly based on context.
+### Experimental Results
 
-## TO-DO's
-- [ ] Measure performance (eos prediction accuracy, benchmarks) of pre-trained DiffuGPT before and after fine-tuning on dataset of (text + eos + pad)
-- [ ] Curriculum learning on optimzer steps (currently is on samples, +1 every time a new sample is yielded)
-- [dave] - Implement Classification/PredictionDataset in `datamodule.py` to generate training data that predicts 1 for eos and 0 for non-eos tokens.
-- see datamodule, same for regression.
-- [dave] - Implement RegressionDataset in `datamodule.py` to handle the length of the sequence.
-- the expected output is a tensor of shape (batch_size, 1)
-- dataloader iterates over the dataset and returns a batch of sequences
-- get item handles the logic of how to get the data from the dataset and returns X, y, msk
-- structure of the file class regression with methods: init with prompts and answer, len, get item (which returns x, y, msk); second class: memmapdatamodule with 
+Our experiments with LLaDa-8B show:
 
-### Sync 30/04/25
-- [x] Measure eos accuracy (does it actually improve?) - then, create same dataset with different mask rationale: different training to force model to predict eos token at the first step of the diffusion process (goal: predicting eos one-shot)
-    - otherwise, we mask and unmask tokens until model predicts where the eos token is
-    - observation: if the model is able to predict some mask tokens, it is likely to predict the eos token as well
-- [x] Define a method to evaluate our specific task, e.g., how to measure the performance of the model in predicting the eos token at the first step of the diffusion process (accuracy / metrics / as function of numbe of unmasked tokens etc).
-- ~~[x] Complete `check_config_validity` in `utils.py`~~
+1. **Token-level Classification**: The classifier based on LLaDa embeddings correctly predicts upper bounds for over 80% of test cases, with an average bound looseness of ~127 tokens.
 
-### Experiments
+2. **Zero-shot Quantile Heuristics**: Show a clear trade-off - higher quantiles yield higher correctness (Q75 achieves 99.88% valid bounds) but looser estimates (~510 tokens).
 
-- [ ] Baseline Experiment
-	- [ ]	Train and evaluate DiffuGPT baseline to establish reference performance.
+3. **Regression Methods**: Achieve the lowest RMSE but produce valid bounds for fewer samples (46-57%), as they're trained to minimize error rather than ensure upper bounds.
 
-- [ ] EOS and PAD Prediction Experiments
-	- [ ]	EOS-only training (Accuracy-focused): loss computed on <eos> tokens
-	- [ ]	EOS+PAD joint training (Random data) (Accuracy-focused): 
+4. **Comparison with DistilBERT**: While DistilBERT exhibited lower average error in some cases, it frequently underestimated length, which is problematic for generation. LLaDa methods tended to safely overestimate.
 
-- [ ] Curriculum Learning Experiments
-	- [ ]	EOS+PAD training with Curriculum Learning (Accuracy and generalization): Begin training on sequences of short length (e.g., 20 tokens), gradually increasing length (20 → 40 → 60, etc.). 
+5. **Efficiency Gains**: Our best methods save approximately 760-870 tokens on a 1024-token context window, representing substantial computational savings with minimal overhead.
 
-- [ ] Loss Function Ablation Studies
-	- [ ]	Loss-weighting for EOS/PAD tokens (Improving token prediction accuracy): Experiment with weighted cross-entropy losses specifically targeting EOS/PAD token accuracy.
-	- [ ] Auxiliary loss (contrastive/regularization) (Promoting robustness): Introduce auxiliary contrastive or regularization terms focusing on EOS/PAD prediction.
+### Limitations & Future Work
 
-- [ ] Quick RL-based Experiment????
-    - [ ]	Reinforcement Learning for EOS accuracy optimization (Rapid improvement): reward explicitly based on EOS token prediction accuracy. Policy-gradient or PPO fine-tuning.
+Our work has several limitations that suggest directions for future research:
 
-- [ ] Inference Performance Checks
-	- [ ] Benchmark inference speed (tokens/sec, latency per sequence).
-	- [ ] Compare EOS/PAD trained models vs baseline(both arm and diffu-gpt)
+1. **Computational Constraints**: Limited computational resources restricted our ability to explore more complex models or larger datasets.
 
-- [ ] Generalization & Robustness Testing
-	- [ ]	Length generalization tests: Evaluate models trained on shorter sequences against significantly longer test sequences.
-	- [ ]	Domain generalization tests???
+2. **Model Requirements**: Our approach works best with DLMs that have embeddings pre-trained for variable-length output generation.
 
-### Sync 14/05/25
+3. **Pretraining Challenges**: We began exploring ways to adapt existing diffusion language models to support variable-length generation (e.g., with DiffuGPT), but this remains an open challenge.
 
-5 methods for evaluation
-1. logit (baseline)
-2. concat regression (vitto)
-3. average regression (vitto)
-4. classification (luca)
-5. distilbert (vitto)
+4. **Zero-shot Prediction Depth**: We did not test zero-shot EoS prediction at different stages of the denoising process, which might improve accuracy.
 
-after training them, we can evaluate them on the test set.
+5. **Output Quality Analysis**: Our assumption that models maintain performance under varying upper bounds needs further verification.
 
-#### TODO
-- [ ] Implement the 5 methods for evaluation
-- [ ] remove unnecessary code from the repo
-- [ ] add table to the report - how good are the models at predicting the eos token?
-- [ ] generate with 25 - 50 - 75% of the tokens masked : 5 
+6. **Dataset Limitations**: We used clean, multilingual, conversational prompts. A more diverse and length-balanced dataset could yield more generalizable insights.
 
-### Feedback from Professor (private)
-- ambition is good, doability is the question
-- concretize the chance of success - a series of questions that can be answered quickly at the beginning
-- check how we compare the different models, what kind of benchmarks and metrics we want to use (throughput: tokens per second with minimal perplexity loss)
-- be very explicit about research question, don’t fear to be overly specific, also be open about the limitations
-- change formulations to see if changing head affects anything: robustness checks
-- find sources that do not affect variance
-- walk the reader through the resulting paper
+7. **Multilingual Capabilities**: We only superficially explored the model's multilingual capabilities and its sensitivity to prompt phrasing.
+
+### Conclusion
+
+Our experiments addressed a significant limitation of DLMs by investigating how to upper bound the output sequence length. The core challenge is balancing the tightness of the predicted bound with the risk of underestimation, which can lead to premature truncation of generated text.
+
+We demonstrated that upper bound prediction can be successfully approached as a classification or regression problem using a DLM's internal representations. A classifier relying on the DLM's internal representation strikes the best balance between bound tightness and accuracy, even compared to methods using sentence-level DistilBERT embeddings.
+
+This work shows that predicting output sequence length is a viable strategy for enhancing the efficiency of DLMs like LLaDa, with potential for zero-shot and specialized solutions to address computational challenges in large-scale generative models.
+
 
 ## Usage
-
-We provide a comprehensive toolkit for training, evaluating, and using diffusion language models. Follow these instructions to get started.
 
 ### Installation
 
