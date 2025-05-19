@@ -7,9 +7,9 @@ __pycache__
 */local_config*
 */checkpoints
 *.pt
-diffusion-llms/data/*/
 !diffusion-llms/data/recipe/
 *.pth
+*/diffusion_llms/data/*
 
 *.ckpt
 .DS_Store
