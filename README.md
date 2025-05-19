@@ -1,6 +1,14 @@
 # More Efficient Text Diffusion via Length Prediction
 
-[Davide Beltrame](https://www.linkedin.com/in/davide-beltrame/), [Giacomo Cirò](https://www.linkedin.com/in/giacomo-ciro/), [Luca Gandolfi](https://www.linkedin.com/in/luca-g-1b0b661bb/), [Vittorio Rossi](https://www.linkedin.com/in/vitrossi/)
+**[Davide Beltrame](https://www.linkedin.com/in/davide-beltrame/)**\*,
+**[Giacomo Cirò](https://www.linkedin.com/in/giacomo-ciro/)**\*,
+**[Luca Gandolfi](https://www.linkedin.com/in/luca-g-1b0b661bb/)**\*,
+**[Vittorio Rossi](https://www.linkedin.com/in/vitrossi/)**\*
+
+Bocconi University  
+Milan, Italy
+
+*Equal contribution, the ordering is alphabetical.
 
 ## Abstract
 
